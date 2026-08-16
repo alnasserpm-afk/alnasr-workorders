@@ -199,6 +199,12 @@
   }
   .user-field{display:flex;align-items:center;gap:10px;font-size:12.5px;color:#e7e3d8;}
   .user-field .logout-link{color:#b9b5aa;cursor:pointer;text-decoration:underline;font-size:11.5px;}
+  .install-btn{
+    background:var(--press);color:#fff;border:none;padding:6px 12px;border-radius:20px;
+    font-family:'Tajawal',sans-serif;font-size:11.5px;font-weight:700;cursor:pointer;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .install-btn:active{opacity:.85;}
   .emp-row{
     display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;
     background:var(--card);border:1px solid var(--line);border-radius:5px;margin-bottom:8px;
@@ -280,6 +286,7 @@
     </div>
   </div>
   <div class="user-field" id="userField" style="display:none;">
+    <button id="installBtn" class="install-btn" onclick="triggerInstall()" style="display:none;">📲 تثبيت التطبيق</button>
     <span id="userNameDisplay"></span>
     <span class="logout-link" onclick="logout()">تسجيل خروج</span>
   </div>
@@ -1545,7 +1552,45 @@ function renderDailyTable(){
   }).join('');
 }
 
+let deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  const btn = document.getElementById('installBtn');
+  if(btn) btn.style.display = 'inline-block';
+});
+window.addEventListener('appinstalled', () => {
+  deferredInstallPrompt = null;
+  const btn = document.getElementById('installBtn');
+  if(btn) btn.style.display = 'none';
+  showToast('تم تثبيت التطبيق بنجاح');
+});
+function isIos(){
+  return /iphone|ipad|ipod/i.test(navigator.userAgent);
+}
+function isStandalone(){
+  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+async function triggerInstall(){
+  if(deferredInstallPrompt){
+    deferredInstallPrompt.prompt();
+    const choice = await deferredInstallPrompt.userChoice;
+    deferredInstallPrompt = null;
+    document.getElementById('installBtn').style.display = 'none';
+    return;
+  }
+  if(isIos()){
+    showToast('من متصفح Safari: اضغط زر المشاركة ⬆️ ثم "إضافة إلى الشاشة الرئيسية"');
+    return;
+  }
+  showToast('التطبيق مثبّت بالفعل أو غير متاح للتثبيت حاليًا من هذا المتصفح');
+}
+
 (async function init(){
+  if(isIos() && !isStandalone()){
+    const btn = document.getElementById('installBtn');
+    if(btn){ btn.style.display = 'inline-block'; btn.textContent = '📲 كيفية التثبيت'; }
+  }
   if('serviceWorker' in navigator){
     try{ await navigator.serviceWorker.register('./sw.js'); }catch(e){}
   }
