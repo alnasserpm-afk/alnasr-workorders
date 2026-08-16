@@ -275,7 +275,7 @@
     <label>الاسم</label>
     <select id="loginEmployeeSelect"></select>
     <label>الرمز (PIN)</label>
-    <input id="loginPinInput" name="workorder-pin-field" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="6" placeholder="ادخل الرمز" onkeydown="if(event.key==='Enter') handleLogin();">
+    <input id="loginPinInput" name="workorder-pin-field" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="6" placeholder="ادخل الرمز" onkeydown="if(event.key==='Enter') handleLogin();">
     <button onclick="handleLogin()">دخول</button>
     <div class="err" id="loginError">الرمز غير صحيح، حاول مرة أخرى</div>
   </div>
@@ -443,13 +443,13 @@ async function handleLogin(){
   }
   errBox.style.display = 'none';
   CURRENT_USER = emp;
-  try{ await window.storage.set('logged-in-employee-id', String(emp.id), false); }catch(err){}
+  try{ localStorage.setItem('alnasr-logged-in-employee-id', String(emp.id)); }catch(err){}
   await enterApp();
 }
 
 async function logout(){
   CURRENT_USER = null;
-  try{ await window.storage.delete('logged-in-employee-id', false); }catch(err){}
+  try{ localStorage.removeItem('alnasr-logged-in-employee-id'); }catch(err){}
   document.getElementById('loginPinInput').value = '';
   document.getElementById('userField').style.display = 'none';
   document.getElementById('loginOverlay').style.display = 'flex';
@@ -468,9 +468,9 @@ async function enterApp(){
 
 async function tryAutoLogin(){
   try{
-    const r = await window.storage.get('logged-in-employee-id', false);
-    if(r && r.value){
-      const emp = EMPLOYEES.find(e=>e.id===Number(r.value) && e.active);
+    const savedId = localStorage.getItem('alnasr-logged-in-employee-id');
+    if(savedId){
+      const emp = EMPLOYEES.find(e=>e.id===Number(savedId) && e.active);
       if(emp){
         CURRENT_USER = emp;
         await enterApp();
