@@ -180,6 +180,22 @@
     border-radius:5px;font-family:'Tajawal',sans-serif;font-size:14px;font-weight:800;cursor:pointer;
   }
   .login-box .err{color:var(--warn);font-size:12.5px;margin-top:10px;display:none;}
+  .pin-display{
+    display:flex;justify-content:center;gap:14px;margin:8px 0 4px;padding:14px 0;
+    background:#fff;border:1px solid var(--line);border-radius:5px;
+  }
+  .pin-dot{width:14px;height:14px;border-radius:50%;border:2px solid var(--line);background:#fff;}
+  .pin-dot.filled{background:var(--press);border-color:var(--press);}
+  .pin-keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px;}
+  .pin-keypad button{
+    padding:14px 0;font-size:19px;font-weight:800;border:1px solid var(--line);border-radius:6px;
+    background:#fff;font-family:'JetBrains Mono',monospace;cursor:pointer;color:var(--ink);
+    -webkit-tap-highlight-color:transparent;touch-action:manipulation;
+  }
+  .pin-keypad button:active{background:var(--paper);}
+  .pin-keypad .pin-clear, .pin-keypad .pin-back{
+    font-family:'Tajawal',sans-serif;font-size:13px;font-weight:700;color:var(--warn);
+  }
   .user-field{display:flex;align-items:center;gap:10px;font-size:12.5px;color:#e7e3d8;}
   .user-field .logout-link{color:#b9b5aa;cursor:pointer;text-decoration:underline;font-size:11.5px;}
   .emp-row{
@@ -275,7 +291,23 @@
     <label>الاسم</label>
     <select id="loginEmployeeSelect"></select>
     <label>الرمز (PIN)</label>
-    <input id="loginPinInput" name="workorder-pin-field" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="6" placeholder="ادخل الرمز" onkeydown="if(event.key==='Enter') handleLogin();">
+    <div class="pin-display" id="pinDisplay">
+      <span class="pin-dot"></span><span class="pin-dot"></span><span class="pin-dot"></span><span class="pin-dot"></span>
+    </div>
+    <div class="pin-keypad">
+      <button type="button" onclick="pinPress('1')">1</button>
+      <button type="button" onclick="pinPress('2')">2</button>
+      <button type="button" onclick="pinPress('3')">3</button>
+      <button type="button" onclick="pinPress('4')">4</button>
+      <button type="button" onclick="pinPress('5')">5</button>
+      <button type="button" onclick="pinPress('6')">6</button>
+      <button type="button" onclick="pinPress('7')">7</button>
+      <button type="button" onclick="pinPress('8')">8</button>
+      <button type="button" onclick="pinPress('9')">9</button>
+      <button type="button" class="pin-clear" onclick="pinClear()">مسح</button>
+      <button type="button" onclick="pinPress('0')">0</button>
+      <button type="button" class="pin-back" onclick="pinBackspace()">⌫</button>
+    </div>
     <button onclick="handleLogin()">دخول</button>
     <div class="err" id="loginError">الرمز غير صحيح، حاول مرة أخرى</div>
   </div>
@@ -432,25 +464,47 @@ function populateLoginSelect(){
   sel.innerHTML = active.map(e=>`<option value="${e.id}">${escapeHtml(e.name)}</option>`).join('');
 }
 
+let pinValue = '';
+function renderPinDots(){
+  const dots = document.querySelectorAll('#pinDisplay .pin-dot');
+  dots.forEach((d,i)=> d.classList.toggle('filled', i < pinValue.length));
+}
+function pinPress(digit){
+  if(pinValue.length >= 4) return;
+  pinValue += digit;
+  renderPinDots();
+  document.getElementById('loginError').style.display = 'none';
+  if(pinValue.length === 4) handleLogin();
+}
+function pinBackspace(){
+  pinValue = pinValue.slice(0, -1);
+  renderPinDots();
+}
+function pinClear(){
+  pinValue = '';
+  renderPinDots();
+}
+
 async function handleLogin(){
   const id = Number(document.getElementById('loginEmployeeSelect').value);
-  const pin = document.getElementById('loginPinInput').value.trim();
   const emp = EMPLOYEES.find(e=>e.id===id && e.active);
   const errBox = document.getElementById('loginError');
-  if(!emp || emp.pin !== pin){
+  if(!emp || emp.pin !== pinValue){
     errBox.style.display = 'block';
+    pinClear();
     return;
   }
   errBox.style.display = 'none';
   CURRENT_USER = emp;
   try{ localStorage.setItem('alnasr-logged-in-employee-id', String(emp.id)); }catch(err){}
+  pinClear();
   await enterApp();
 }
 
 async function logout(){
   CURRENT_USER = null;
   try{ localStorage.removeItem('alnasr-logged-in-employee-id'); }catch(err){}
-  document.getElementById('loginPinInput').value = '';
+  pinClear();
   document.getElementById('userField').style.display = 'none';
   document.getElementById('loginOverlay').style.display = 'flex';
   populateLoginSelect();
