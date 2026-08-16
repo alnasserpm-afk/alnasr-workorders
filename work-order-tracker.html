@@ -411,6 +411,9 @@ function showToast(msg){
 function orderLabel(o){
   return (o.type==='plastic' ? 'ب' : 'و') + '#' + o.id;
 }
+function orderLabelHtml(o){
+  return (o.type==='plastic' ? 'ب' : 'و') + '<bdi>#' + o.id + '</bdi>';
+}
 
 let EMPLOYEES = [];
 let CURRENT_USER = null;
@@ -749,7 +752,7 @@ function renderDashboard(){
     const dots = stages.map((s,i)=>`<span class="${i<=stageIdx ? s.dot : ''}"></span>`).join('');
     return `
       <div class="card ${o.type==='plastic'?'plastic':''}" onclick="openDetail('${o.type}',${o.id})">
-        <div class="orderno mono"><span class="type-badge ${o.type==='plastic'?'plastic':''}">${o.type==='plastic'?'بلاستيك':'ورقي'}</span> ${orderLabel(o)}</div>
+        <div class="orderno mono"><span class="type-badge ${o.type==='plastic'?'plastic':''}">${o.type==='plastic'?'بلاستيك':'ورقي'}</span> ${orderLabelHtml(o)}</div>
         <div class="client">${escapeHtml(o.clientName||'—')}</div>
         <div class="work">${escapeHtml(o.workName||'—')} ${o.quantity?('· '+escapeHtml(o.quantity)):''}</div>
         <div class="cmyk-dots">${dots}</div>
@@ -1172,7 +1175,7 @@ function openDetail(type, id){
       ['تاريخ التسليم', o.deliveryDate], ['رقم بيان التسليم', o.deliveryNoteNumber],
       ['التوقيع', o.signature]
     ].filter(([k,v]) => v);
-    bodyExtra = `<div class="detail-grid">${detailRows.map(([k,v])=>`<div class="pair"><span>${escapeHtml(v)}</span><span class="k">${escapeHtml(k)}</span></div>`).join('')}</div>
+    bodyExtra = `<div class="detail-grid">${detailRows.map(([k,v])=>`<div class="pair"><bdi>${escapeHtml(v)}</bdi><span class="k">${escapeHtml(k)}</span></div>`).join('')}</div>
       ${o.otherInfo ? `<div class="hint" style="margin-bottom:10px;"><b>معلومات أخرى:</b> ${escapeHtml(o.otherInfo)}</div>` : ''}
       ${o.notes ? `<div class="hint" style="margin-bottom:10px;"><b>ملاحظات:</b> ${escapeHtml(o.notes)}</div>` : ''}`;
   }else{
@@ -1192,7 +1195,7 @@ function openDetail(type, id){
       ${capsRows ? `<div class="hint" style="margin-bottom:4px;"><b>الأغطية</b></div><table class="items-table" style="margin-bottom:14px;"><thead><tr><th>الرقم</th><th>اللون</th><th>العدد</th></tr></thead><tbody>${capsRows}</tbody></table>` : ''}
       ${o.generalNote ? `<div class="hint" style="margin-bottom:10px;"><b>ملاحظة عامة:</b> ${escapeHtml(o.generalNote)}</div>` : ''}
       ${o.designImage ? `<div style="margin-bottom:14px;"><img src="${o.designImage}" style="max-width:100%;border-radius:4px;border:1px solid var(--line);"></div>` : ''}
-      <div class="detail-grid">${detailRows.map(([k,v])=>`<div class="pair"><span>${escapeHtml(v)}</span><span class="k">${escapeHtml(k)}</span></div>`).join('')}</div>
+      <div class="detail-grid">${detailRows.map(([k,v])=>`<div class="pair"><bdi>${escapeHtml(v)}</bdi><span class="k">${escapeHtml(k)}</span></div>`).join('')}</div>
     `;
   }
 
@@ -1211,7 +1214,7 @@ function openDetail(type, id){
     <div class="modal">
       <div class="modal-head">
         <div>
-          <div class="mono" style="font-size:12px;color:#cfcbc0;">${o.type==='plastic'?'أمر عمل بلاستيك':'أمر عمل ورقي'} ${orderLabel(o)}</div>
+          <div class="mono" style="font-size:12px;color:#cfcbc0;">${o.type==='plastic'?'أمر عمل بلاستيك':'أمر عمل ورقي'} ${orderLabelHtml(o)}</div>
           <div style="font-size:17px;font-weight:800;">${escapeHtml(o.clientName)}</div>
           <div style="font-size:12px;color:#cfcbc0;">${escapeHtml(o.workName||'')}</div>
         </div>
