@@ -628,8 +628,28 @@ function matchesSearch(o, term){
   const hay = [o.clientName, o.workName, orderLabel(o), o.notes, o.generalNote].filter(Boolean).join(' ').toLowerCase();
   return hay.includes(term.toLowerCase());
 }
-function setDashSearch(v){ dashSearch = v; renderDashboard(); }
-function setDashStatus(v){ dashStatusFilter = v; renderDashboard(); }
+let searchDebounceTimer = null;
+function setDashSearch(v){
+  dashSearch = v;
+  clearTimeout(searchDebounceTimer);
+  searchDebounceTimer = setTimeout(() => {
+    renderDashboardResultsOnly();
+  }, 300);
+}
+function renderDashboardResultsOnly(){
+  // إعادة بناء نتائج الكروت فقط بدون لمس خانة البحث نفسها (تحافظ على تركيز الكيبورد)
+  const wasFocused = document.activeElement && document.activeElement.tagName === 'INPUT' && document.activeElement.closest('.toolbar');
+  const cursorPos = wasFocused ? document.activeElement.selectionStart : null;
+  renderDashboard();
+  if(wasFocused){
+    const input = document.querySelector('.toolbar input[type="text"]');
+    if(input){
+      input.focus();
+      if(cursorPos !== null) input.setSelectionRange(cursorPos, cursorPos);
+    }
+  }
+}
+function setDashStatus(v){ dashSearch = document.querySelector('.toolbar input[type="text"]').value; dashStatusFilter = v; renderDashboard(); }
 
 function getFilteredOrders(){
   return ORDERS.filter(o =>
