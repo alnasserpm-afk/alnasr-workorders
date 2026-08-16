@@ -2,10 +2,11 @@
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#18161d">
 <link rel="manifest" href="./manifest.json">
 <link rel="apple-touch-icon" href="./icon-192.png">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <title>متابعة أوامر العمل — مطبعة النصر</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
@@ -195,6 +196,53 @@
   .add-emp-box input, .add-emp-box select{
     padding:9px 10px;border:1px solid var(--line);border-radius:5px;font-family:'Tajawal',sans-serif;font-size:13.5px;
   }
+
+  /* ---------- تحسينات شكل الموبايل / تطبيق ---------- */
+  body{
+    padding-top:env(safe-area-inset-top);
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+  header{
+    position:sticky;top:0;z-index:50;
+    padding-top:calc(14px + env(safe-area-inset-top));
+  }
+  nav.tabs{
+    position:sticky;top:0;z-index:40;
+  }
+  @media (display-mode: standalone){
+    header{ padding-top:calc(18px + env(safe-area-inset-top)); }
+  }
+  .card{ -webkit-tap-highlight-color:transparent; }
+  .card:active{ transform:scale(0.98); transition:transform .08s; }
+  button, .btn{ -webkit-tap-highlight-color:transparent; touch-action:manipulation; }
+
+  /* ---------- شريط أدوات الداشبورد: بحث + فلاتر + تصدير ---------- */
+  .toolbar{ display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px; align-items:center; }
+  .toolbar input[type="text"]{
+    flex:1; min-width:160px; padding:9px 12px; border:1px solid var(--line); border-radius:5px;
+    font-family:'Tajawal',sans-serif; font-size:13.5px;
+  }
+  .toolbar select{
+    padding:9px 10px; border:1px solid var(--line); border-radius:5px;
+    font-family:'Tajawal',sans-serif; font-size:13px; background:#fff;
+  }
+  .toolbar .btn-export{
+    padding:9px 14px; border-radius:5px; border:1px solid var(--line); background:#fff;
+    font-family:'Tajawal',sans-serif; font-size:12.5px; font-weight:700; cursor:pointer; white-space:nowrap;
+  }
+  .toolbar .btn-export:active{ background:var(--paper); }
+
+  /* ---------- منطقة الطباعة (مخفية على الشاشة، تظهر عند الطباعة فقط) ---------- */
+  #printArea{ display:none; }
+  @media print{
+    header, nav.tabs, .toolbar, .filter-row, #loginOverlay{ display:none !important; }
+    #dashboardView > .grid{ display:none !important; }
+    #printArea{ display:block !important; }
+    #printArea table{ width:100%; border-collapse:collapse; font-family:'Tajawal',sans-serif; }
+    #printArea th, #printArea td{ border:1px solid #999; padding:6px 8px; font-size:11px; text-align:right; }
+    #printArea th{ background:#eee; }
+    #printArea h2{ font-family:'Tajawal',sans-serif; margin-bottom:4px; }
+  }
 </style>
 </head>
 <body>
@@ -339,6 +387,8 @@ let DAILY = [];
 let currentTab = 'dashboard';
 let formType = 'paper';
 let dashFilter = 'all';
+let dashSearch = '';
+let dashStatusFilter = 'all';
 let plasticItemCounter = 0;
 let capsItemCounter = 0;
 let pendingDesignImage = '';
@@ -565,20 +615,134 @@ function isOverdue(order){
   return dd < today;
 }
 
+function allStatusOptions(){
+  const seen = new Map();
+  [...STAGES_PAPER, ...STAGES_PLASTIC].forEach(s => { if(!seen.has(s.key)) seen.set(s.key, s.label); });
+  return [...seen.entries()];
+}
+function matchesSearch(o, term){
+  if(!term) return true;
+  const hay = [o.clientName, o.workName, orderLabel(o), o.notes, o.generalNote].filter(Boolean).join(' ').toLowerCase();
+  return hay.includes(term.toLowerCase());
+}
+function setDashSearch(v){ dashSearch = v; renderDashboard(); }
+function setDashStatus(v){ dashStatusFilter = v; renderDashboard(); }
+
+function getFilteredOrders(){
+  return ORDERS.filter(o =>
+    (dashFilter==='all' || o.type===dashFilter) &&
+    (dashStatusFilter==='all' || o.status===dashStatusFilter) &&
+    matchesSearch(o, dashSearch)
+  );
+}
+
+function exportExcel(){
+  const rows = getFilteredOrders().map(o => ({
+    'الرقم': orderLabel(o),
+    'النوع': o.type==='plastic' ? 'بلاستيك' : 'ورقي',
+    'العميل': o.clientName||'',
+    'الشغلانة': o.workName||'',
+    'الكمية': o.quantity||'',
+    'الحالة': o.status||'',
+    'تاريخ التسليم': o.deliveryDate||'',
+    'متأخر؟': isOverdue(o) ? 'نعم' : 'لا',
+    'متوقف؟': o.paused ? 'نعم' : 'لا'
+  }));
+  if(!rows.length){ showToast('لا توجد بيانات لتصديرها'); return; }
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'أوامر العمل');
+  XLSX.writeFile(wb, `اوامر-العمل-${nowStamp().replace(/[\/: ]/g,'-')}.xlsx`);
+}
+
+function exportPrint(){
+  const rows = getFilteredOrders();
+  if(!rows.length){ showToast('لا توجد بيانات للطباعة'); return; }
+  const area = document.getElementById('printArea');
+  area.innerHTML = `
+    <h2>تقرير أوامر العمل — مطبعة النصر</h2>
+    <div style="font-size:11px;margin-bottom:10px;">تاريخ التقرير: ${nowStamp()} — عدد الأوامر: ${rows.length}</div>
+    <table>
+      <thead><tr>
+        <th>الرقم</th><th>النوع</th><th>العميل</th><th>الشغلانة</th><th>الكمية</th><th>الحالة</th><th>تاريخ التسليم</th>
+      </tr></thead>
+      <tbody>
+        ${rows.map(o=>`<tr>
+          <td>${escapeHtml(orderLabel(o))}</td>
+          <td>${o.type==='plastic'?'بلاستيك':'ورقي'}</td>
+          <td>${escapeHtml(o.clientName||'—')}</td>
+          <td>${escapeHtml(o.workName||'—')}</td>
+          <td>${escapeHtml(o.quantity||'—')}</td>
+          <td>${escapeHtml(o.status||'—')}</td>
+          <td>${escapeHtml(o.deliveryDate||'—')}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+  window.print();
+}
+
+const notifiedOrderIds = new Set();
+
+function requestNotifyPermission(){
+  if(!('Notification' in window)){ showToast('المتصفح ده مايدعمش التنبيهات'); return; }
+  if(Notification.permission === 'granted'){
+    showToast('تنبيهات التأخير مفعّلة بالفعل');
+    checkOverdueNotifications(true);
+    return;
+  }
+  Notification.requestPermission().then(perm => {
+    if(perm === 'granted'){
+      showToast('تم تفعيل تنبيهات التأخير');
+      checkOverdueNotifications(true);
+    }else{
+      showToast('تم رفض إذن التنبيهات من المتصفح');
+    }
+  });
+}
+
+function checkOverdueNotifications(force){
+  if(!('Notification' in window) || Notification.permission !== 'granted') return;
+  const overdueOrders = ORDERS.filter(o => isOverdue(o) && !o.paused);
+  overdueOrders.forEach(o => {
+    const key = o.type + '-' + o.id;
+    if(force || !notifiedOrderIds.has(key)){
+      notifiedOrderIds.add(key);
+      try{
+        new Notification('⚠ أمر عمل متأخر', {
+          body: `${orderLabel(o)} — ${o.clientName||''} — موعد التسليم: ${o.deliveryDate||'—'}`,
+          tag: key
+        });
+      }catch(e){}
+    }
+  });
+}
+
 function renderDashboard(){
   const el = document.getElementById('dashboardView');
-  const visible = ORDERS.filter(o => dashFilter==='all' || o.type===dashFilter);
+  const visible = getFilteredOrders();
+  const statusOptions = allStatusOptions();
+  const toolbarHtml = `
+    <div class="toolbar">
+      <input type="text" placeholder="بحث بالاسم أو الشغلانة أو الرقم..." value="${escapeHtml(dashSearch)}" oninput="setDashSearch(this.value)">
+      <select onchange="setDashStatus(this.value)">
+        <option value="all">كل الحالات</option>
+        ${statusOptions.map(([k,l])=>`<option value="${k}" ${dashStatusFilter===k?'selected':''}>${l}</option>`).join('')}
+      </select>
+      <button class="btn-export" onclick="exportExcel()">⬇ Excel</button>
+      <button class="btn-export" onclick="exportPrint()">🖨 طباعة / PDF</button>
+      <button class="btn-export" onclick="requestNotifyPermission()" id="notifyBtn">🔔 تنبيهات التأخير</button>
+    </div>`;
   const filterHtml = `<div class="filter-row">
       <button class="${dashFilter==='all'?'active':''}" onclick="setFilter('all')">الكل</button>
       <button class="${dashFilter==='paper'?'active':''}" onclick="setFilter('paper')">ورقي</button>
       <button class="${dashFilter==='plastic'?'active':''}" onclick="setFilter('plastic')">بلاستيكي</button>
     </div>`;
   if(visible.length === 0){
-    el.innerHTML = filterHtml + `<div id="empty">لا توجد أوامر عمل بعد في هذا التصنيف.</div>`;
+    el.innerHTML = toolbarHtml + filterHtml + `<div id="empty">لا توجد أوامر عمل مطابقة.</div><div id="printArea"></div>`;
     return;
   }
   const sorted = [...visible].sort((a,b)=>b.id-a.id);
-  el.innerHTML = filterHtml + `<div class="grid">` + sorted.map(o=>{
+  el.innerHTML = toolbarHtml + filterHtml + `<div class="grid">` + sorted.map(o=>{
     const overdue = isOverdue(o);
     const stages = stagesFor(o.type);
     const stageIdx = stages.findIndex(s=>s.key===o.status);
@@ -594,7 +758,8 @@ function renderDashboard(){
           ${o.paused ? '<span class="overdue-badge" style="background:#c78a00;">⏸ متوقف</span>' : (overdue ? '<span class="overdue-badge">متأخر</span>' : (o.deliveryDate ? `<span class="mono">${escapeHtml(o.deliveryDate)}</span>` : ''))}
         </div>
       </div>`;
-  }).join('') + `</div>`;
+  }).join('') + `</div><div id="printArea"></div>`;
+  checkOverdueNotifications();
 }
 function setFilter(f){ dashFilter = f; renderDashboard(); }
 
