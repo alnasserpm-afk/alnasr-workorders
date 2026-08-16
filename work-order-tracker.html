@@ -227,7 +227,7 @@
     <label>الاسم</label>
     <select id="loginEmployeeSelect"></select>
     <label>الرمز (PIN)</label>
-    <input id="loginPinInput" type="tel" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="6" placeholder="ادخل الرمز" onkeydown="if(event.key==='Enter') handleLogin();">
+    <input id="loginPinInput" name="workorder-pin-field" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="6" placeholder="ادخل الرمز" onkeydown="if(event.key==='Enter') handleLogin();">
     <button onclick="handleLogin()">دخول</button>
     <div class="err" id="loginError">الرمز غير صحيح، حاول مرة أخرى</div>
   </div>
