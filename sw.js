@@ -1,4 +1,4 @@
-const CACHE_NAME = 'alnasr-orders-v1';
+const CACHE_NAME = 'alnasr-orders-v2';
 const CORE_ASSETS = [
   './work-order-tracker.html',
   './manifest.json'
@@ -22,15 +22,14 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// استراتيجية: جرّب الشبكة الأول (عشان بيانات Supabase تفضل محدثة)، ولو فشلت استخدم الكاش
-// ملاحظة: طلبات Supabase نفسها (API) بتتسيب زي ما هي بدون تخزين، الكاش بس لملفات الواجهة
+// استراتيجية: جرّب الشبكة الأول دايمًا (مع تجاهل أي كاش HTTP وسيط)، ولو فشلت استخدم الكاش
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   const isSupabaseCall = url.hostname.includes('supabase.co');
   if (isSupabaseCall) return; // سيب طلبات قاعدة البيانات تروح للشبكة مباشرة دايمًا
 
   event.respondWith(
-    fetch(event.request)
+    fetch(event.request, { cache: 'no-store' })
       .then((response) => {
         const clone = response.clone();
         caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
