@@ -255,6 +255,20 @@
   .emp-row.inactive{opacity:.5;}
   .emp-row .emp-name{font-weight:800;font-size:14px;}
   .emp-row .emp-role{font-size:11.5px;color:var(--muted);margin-right:8px;}
+  .emp-row-actions{display:flex;gap:6px;flex-shrink:0;}
+  .emp-row-editing{
+    flex-direction:column;align-items:stretch;gap:10px;background:#fff;
+    border-color:var(--press);
+  }
+  .emp-edit-fields{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
+  .emp-edit-fields input, .emp-edit-fields select{
+    padding:8px 10px;border:1px solid var(--line);border-radius:5px;font-family:'Tajawal',sans-serif;font-size:13px;
+    width:100%;min-width:0;
+  }
+  .emp-edit-actions{display:flex;gap:8px;justify-content:flex-end;}
+  @media (max-width:640px){
+    .emp-edit-fields{grid-template-columns:1fr;}
+  }
   .add-emp-box{
     background:var(--card);border:1px solid var(--line);border-radius:6px;padding:16px;margin-bottom:20px;
   }
@@ -715,15 +729,67 @@ function renderEmployees(){
   `;
   renderEmployeeList();
 }
+let editingEmployeeId = null;
+
 function renderEmployeeList(){
   const list = document.getElementById('empList');
   if(!list) return;
-  list.innerHTML = EMPLOYEES.map(e => `
+  list.innerHTML = EMPLOYEES.map(e => {
+    if(editingEmployeeId === e.id){
+      return `
+        <div class="emp-row emp-row-editing">
+          <div class="emp-edit-fields">
+            <input id="editName_${e.id}" type="text" value="${escapeHtml(e.name)}" placeholder="الاسم">
+            <input id="editPin_${e.id}" type="text" inputmode="numeric" maxlength="6" value="${escapeHtml(e.pin)}" placeholder="الرمز (PIN)">
+            <select id="editRole_${e.id}">
+              <option value="عامل" ${e.role==='عامل'?'selected':''}>عامل</option>
+              <option value="فني" ${e.role==='فني'?'selected':''}>فني</option>
+              <option value="إدارة" ${e.role==='إدارة'?'selected':''}>إدارة</option>
+            </select>
+          </div>
+          <div class="emp-edit-actions">
+            <button class="btn btn-primary btn-small" onclick="saveEmployeeEdit(${e.id})">حفظ</button>
+            <button class="btn btn-ghost btn-small" onclick="cancelEmployeeEdit()">إلغاء</button>
+          </div>
+        </div>`;
+    }
+    return `
     <div class="emp-row ${e.active?'':'inactive'}">
       <div><span class="emp-name">${escapeHtml(e.name)}</span><span class="emp-role">${e.role}</span></div>
-      <button class="btn btn-ghost btn-small" onclick="toggleEmployeeActive(${e.id})">${e.active ? 'تعطيل' : 'تفعيل'}</button>
-    </div>
-  `).join('');
+      <div class="emp-row-actions">
+        <button class="btn btn-ghost btn-small" onclick="startEmployeeEdit(${e.id})">تعديل</button>
+        <button class="btn btn-ghost btn-small" onclick="toggleEmployeeActive(${e.id})">${e.active ? 'تعطيل' : 'تفعيل'}</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+function startEmployeeEdit(id){
+  editingEmployeeId = id;
+  renderEmployeeList();
+}
+function cancelEmployeeEdit(){
+  editingEmployeeId = null;
+  renderEmployeeList();
+}
+async function saveEmployeeEdit(id){
+  const name = document.getElementById(`editName_${id}`).value.trim();
+  const pin = document.getElementById(`editPin_${id}`).value.trim();
+  const role = document.getElementById(`editRole_${id}`).value;
+  if(!name || !pin){ showToast('الاسم والرمز مطلوبان'); return; }
+  try{
+    const {error} = await supabaseClient.from('employees').update({name, pin, role}).eq('id', id);
+    if(error) throw error;
+    const emp = EMPLOYEES.find(e=>e.id===id);
+    if(emp){ emp.name = name; emp.pin = pin; emp.role = role; }
+    editingEmployeeId = null;
+    renderEmployeeList();
+    showToast('تم تحديث بيانات الموظف');
+    if(CURRENT_USER && CURRENT_USER.id === id){
+      CURRENT_USER.name = name; CURRENT_USER.role = role;
+      document.getElementById('userNameDisplay').textContent = name;
+      document.getElementById('userAvatar').textContent = name.trim().charAt(0).toUpperCase();
+    }
+  }catch(e){ showToast('خطأ: ' + e.message); }
 }
 async function addEmployee(){
   const name = document.getElementById('newEmpName').value.trim();
