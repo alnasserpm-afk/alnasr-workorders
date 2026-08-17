@@ -60,7 +60,8 @@
   .cmyk-dots span.on-gray{background:var(--muted);}
   .cmyk-dots span.on-plastic{background:var(--plastic);}
 
-  #empty{text-align:center;padding:60px 20px;color:var(--muted);}
+  #empty{text-align:center;padding:70px 20px;color:var(--muted);}
+  #empty::before{content:'📋';display:block;font-size:42px;margin-bottom:12px;opacity:.5;}
   .filter-row{display:flex;gap:8px;margin-bottom:14px;}
   .filter-row button{
     background:var(--card);border:1px solid var(--line);border-radius:20px;padding:6px 16px;
@@ -69,10 +70,11 @@
   .filter-row button.active{background:var(--ink);color:#fff;border-color:var(--ink);}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:14px;}
   .card{
-    background:var(--card);border:1px solid var(--line);border-radius:4px;padding:16px;cursor:pointer;
-    transition:box-shadow .15s, transform .15s;position:relative;overflow:hidden;
+    background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;cursor:pointer;
+    transition:box-shadow .18s, transform .12s;position:relative;overflow:hidden;
+    box-shadow:0 1px 3px rgba(20,18,14,.06), 0 1px 2px rgba(20,18,14,.04);
   }
-  .card:hover{box-shadow:0 4px 14px rgba(0,0,0,.08);transform:translateY(-1px);}
+  .card:hover{box-shadow:0 8px 24px rgba(20,18,14,.12);transform:translateY(-2px);}
   .card::before{content:'';position:absolute;top:0;right:0;left:0;height:3px;background:linear-gradient(90deg,var(--cyan),var(--magenta),var(--yellow),var(--key));}
   .card.plastic::before{background:linear-gradient(90deg,var(--plastic-lt),var(--plastic));}
   .card .orderno{font-size:11px;color:var(--muted);letter-spacing:.5px;display:flex;align-items:center;gap:6px;}
@@ -129,8 +131,10 @@
   }
   .img-drop img{max-width:100%;max-height:220px;border-radius:4px;margin-top:8px;}
 
-  .modal-backdrop{position:fixed;inset:0;background:rgba(15,13,10,.55);display:flex;align-items:flex-start;justify-content:center;padding:30px 16px;overflow-y:auto;z-index:50;}
-  .modal{background:var(--card);border-radius:6px;max-width:760px;width:100%;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.3);}
+  .modal-backdrop{position:fixed;inset:0;background:rgba(15,13,10,.55);display:flex;align-items:flex-start;justify-content:center;padding:30px 16px;overflow-y:auto;z-index:50;animation:fadeIn .18s ease;}
+  .modal{background:var(--card);border-radius:14px;max-width:760px;width:100%;overflow:hidden;box-shadow:0 24px 70px rgba(0,0,0,.35);animation:slideUp .22s cubic-bezier(.2,.8,.2,1);}
+  @keyframes fadeIn{from{opacity:0;}to{opacity:1;}}
+  @keyframes slideUp{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:translateY(0);}}
   .modal-head{background:var(--ink);color:#f4f1ea;padding:16px 20px;display:flex;justify-content:space-between;align-items:flex-start;}
   .modal-head .x{background:none;border:none;color:#cfcbc0;font-size:20px;cursor:pointer;line-height:1;}
   .modal-body{padding:18px 20px;max-height:75vh;overflow-y:auto;}
@@ -215,9 +219,14 @@
   .add-emp-box{
     background:var(--card);border:1px solid var(--line);border-radius:6px;padding:16px;margin-bottom:20px;
   }
+  html, body{ overflow-x:hidden; max-width:100vw; }
   .add-emp-box .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;}
   .add-emp-box input, .add-emp-box select{
     padding:9px 10px;border:1px solid var(--line);border-radius:5px;font-family:'Tajawal',sans-serif;font-size:13.5px;
+    width:100%; min-width:0;
+  }
+  @media (max-width:640px){
+    .add-emp-box .row3{grid-template-columns:1fr;}
   }
 
   /* ---------- تحسينات شكل الموبايل / تطبيق ---------- */
@@ -266,6 +275,44 @@
     #printArea th{ background:#eee; }
     #printArea h2{ font-family:'Tajawal',sans-serif; margin-bottom:4px; }
   }
+
+  /* ---------- أفاتار المستخدم ---------- */
+  .avatar-circle{
+    width:26px;height:26px;border-radius:50%;background:var(--press);color:#fff;
+    display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex-shrink:0;
+  }
+
+  /* ---------- شريط تنقل سفلي (موبايل) ---------- */
+  .bottom-nav{
+    display:none;position:fixed;bottom:0;left:0;right:0;z-index:45;
+    background:var(--card);border-top:1px solid var(--line);
+    padding:6px 8px calc(6px + env(safe-area-inset-bottom));
+    box-shadow:0 -2px 12px rgba(0,0,0,.06);
+  }
+  .bottom-nav-inner{display:flex;justify-content:space-around;align-items:center;}
+  .bottom-nav button{
+    background:transparent;border:none;display:flex;flex-direction:column;align-items:center;gap:2px;
+    padding:4px 10px;font-family:'Tajawal',sans-serif;font-size:10.5px;font-weight:700;color:var(--muted);
+    cursor:pointer;-webkit-tap-highlight-color:transparent;
+  }
+  .bottom-nav button .ic{font-size:19px;line-height:1;}
+  .bottom-nav button.active{color:var(--press);}
+
+  /* ---------- زرار عائم لإنشاء أمر جديد ---------- */
+  .fab{
+    display:none;position:fixed;bottom:calc(78px + env(safe-area-inset-bottom));left:18px;z-index:46;
+    width:54px;height:54px;border-radius:50%;background:var(--press);color:#fff;border:none;
+    font-size:26px;box-shadow:0 6px 18px rgba(195,31,60,.4);cursor:pointer;
+    align-items:center;justify-content:center;-webkit-tap-highlight-color:transparent;
+  }
+  .fab:active{transform:scale(0.94);}
+
+  @media (max-width:760px){
+    nav.tabs{ display:none; }
+    .bottom-nav{ display:block; }
+    .fab{ display:flex; }
+    main{ padding-bottom:110px; }
+  }
 </style>
 </head>
 <body>
@@ -287,6 +334,7 @@
   </div>
   <div class="user-field" id="userField" style="display:none;">
     <button id="installBtn" class="install-btn" onclick="triggerInstall()" style="display:none;">📲 تثبيت التطبيق</button>
+    <span class="avatar-circle" id="userAvatar"></span>
     <span id="userNameDisplay"></span>
     <span class="logout-link" onclick="logout()">تسجيل خروج</span>
   </div>
@@ -326,6 +374,16 @@
   <button id="tabForm" onclick="switchTab('form')">أمر عمل جديد</button>
   <button id="tabEmployees" onclick="switchTab('employees')" style="display:none;">الموظفين</button>
 </nav>
+
+<button class="fab" id="fabNewOrder" onclick="switchTab('form')" title="أمر عمل جديد">+</button>
+
+<div class="bottom-nav" id="bottomNav">
+  <div class="bottom-nav-inner">
+    <button id="bnDashboard" class="active" onclick="switchTab('dashboard')"><span class="ic">🗂️</span>لوحة المتابعة</button>
+    <button id="bnForm" onclick="switchTab('form')"><span class="ic">➕</span>أمر جديد</button>
+    <button id="bnEmployees" onclick="switchTab('employees')" style="display:none;"><span class="ic">👥</span>الموظفين</button>
+  </div>
+</div>
 
 <main>
   <div id="dashboardView"></div>
@@ -522,7 +580,9 @@ async function enterApp(){
   document.getElementById('loginOverlay').style.display = 'none';
   document.getElementById('userField').style.display = 'flex';
   document.getElementById('userNameDisplay').textContent = CURRENT_USER.name;
+  document.getElementById('userAvatar').textContent = (CURRENT_USER.name||'؟').trim().charAt(0).toUpperCase();
   document.getElementById('tabEmployees').style.display = CURRENT_USER.role === 'إدارة' ? 'inline-block' : 'none';
+  document.getElementById('bnEmployees').style.display = CURRENT_USER.role === 'إدارة' ? 'flex' : 'none';
   await loadOrders();
   await loadDaily();
   renderDashboard();
@@ -659,6 +719,9 @@ function switchTab(tab){
   document.getElementById('tabDashboard').classList.toggle('active', tab==='dashboard');
   document.getElementById('tabForm').classList.toggle('active', tab==='form');
   document.getElementById('tabEmployees').classList.toggle('active', tab==='employees');
+  document.getElementById('bnDashboard').classList.toggle('active', tab==='dashboard');
+  document.getElementById('bnForm').classList.toggle('active', tab==='form');
+  document.getElementById('bnEmployees').classList.toggle('active', tab==='employees');
   document.getElementById('dashboardView').style.display = tab==='dashboard' ? 'block':'none';
   document.getElementById('formView').style.display = tab==='form' ? 'block':'none';
   document.getElementById('employeesView').style.display = tab==='employees' ? 'block':'none';
