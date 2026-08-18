@@ -300,6 +300,17 @@
   .price-editing input{
     width:90px;padding:6px 8px;border:1px solid var(--press);border-radius:4px;font-family:'Tajawal',sans-serif;font-size:12.5px;
   }
+  .finish-checks{display:flex;flex-wrap:wrap;gap:14px;font-size:13px;}
+  .finish-checks label{display:flex;align-items:center;gap:6px;cursor:pointer;}
+  .calc-results-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  @media (max-width:640px){ .calc-results-grid{grid-template-columns:1fr;} }
+  .calc-result-card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:16px;}
+  .calc-result-card h4{margin:0 0 12px;font-size:14px;font-weight:800;color:var(--press);}
+  .calc-result-card.unusable{opacity:.6;}
+  .calc-row{display:flex;justify-content:space-between;font-size:12.5px;padding:6px 0;border-bottom:1px dashed var(--line);}
+  .calc-row bdi{font-weight:700;font-family:'JetBrains Mono',monospace;}
+  .calc-row.calc-total{border-bottom:none;border-top:2px solid var(--ink);margin-top:6px;padding-top:10px;font-size:15px;font-weight:800;}
+  .calc-row.calc-total bdi{color:var(--press);}
   html, body{ overflow-x:hidden; max-width:100vw; }
   .add-emp-box .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;}
   .add-emp-box input, .add-emp-box select{
@@ -454,6 +465,7 @@
   <button id="tabDashboard" class="active" onclick="switchTab('dashboard')">لوحة المتابعة</button>
   <button id="tabForm" onclick="switchTab('form')">أمر عمل جديد</button>
   <button id="tabEmployees" onclick="switchTab('employees')" style="display:none;">الموظفين</button>
+  <button id="tabPaperPrices" onclick="switchTab('paperprices')" style="display:none;">أسعار الورق</button>
   <button id="tabAccounting" onclick="switchTab('accounting')" style="display:none;">المحاسبة</button>
 </nav>
 
@@ -464,6 +476,7 @@
     <button id="bnDashboard" class="active" onclick="switchTab('dashboard')"><span class="ic">🗂️</span>لوحة المتابعة</button>
     <button id="bnForm" onclick="switchTab('form')"><span class="ic">➕</span>أمر جديد</button>
     <button id="bnEmployees" onclick="switchTab('employees')" style="display:none;"><span class="ic">👥</span>الموظفين</button>
+    <button id="bnPaperPrices" onclick="switchTab('paperprices')" style="display:none;"><span class="ic">📄</span>أسعار الورق</button>
     <button id="bnAccounting" onclick="switchTab('accounting')" style="display:none;"><span class="ic">💰</span>المحاسبة</button>
   </div>
 </div>
@@ -472,6 +485,7 @@
   <div id="dashboardView"></div>
   <div id="formView" style="display:none;"></div>
   <div id="employeesView" style="display:none;"></div>
+  <div id="paperPricesView" style="display:none;"></div>
   <div id="accountingView" style="display:none;"></div>
 </main>
 
@@ -667,6 +681,8 @@ async function enterApp(){
   document.getElementById('userAvatar').textContent = (CURRENT_USER.name||'؟').trim().charAt(0).toUpperCase();
   document.getElementById('tabEmployees').style.display = CURRENT_USER.role === 'إدارة' ? 'inline-block' : 'none';
   document.getElementById('bnEmployees').style.display = CURRENT_USER.role === 'إدارة' ? 'flex' : 'none';
+  document.getElementById('tabPaperPrices').style.display = CURRENT_USER.role === 'إدارة' ? 'inline-block' : 'none';
+  document.getElementById('bnPaperPrices').style.display = CURRENT_USER.role === 'إدارة' ? 'flex' : 'none';
   document.getElementById('tabAccounting').style.display = CURRENT_USER.role === 'إدارة' ? 'inline-block' : 'none';
   document.getElementById('bnAccounting').style.display = CURRENT_USER.role === 'إدارة' ? 'flex' : 'none';
   await loadOrders();
@@ -870,8 +886,8 @@ function perSheet(p){
   return n ? (Number(p.price) / n).toFixed(2) : '—';
 }
 
-async function renderAccounting(){
-  const view = document.getElementById('accountingView');
+async function renderPaperPriceList(){
+  const view = document.getElementById('paperPricesView');
   if(!isAdmin()){ view.innerHTML = '<p class="hint">هذه الصفحة متاحة لصلاحية الإدارة فقط.</p>'; return; }
   view.innerHTML = `<div id="paperPriceLoading" class="hint">جاري التحميل...</div>`;
   await loadPaperPrices();
@@ -888,7 +904,7 @@ async function renderAccounting(){
         <input id="newPriceMeasurement" type="text" placeholder="القياس">
         <input id="newPriceGrammage" type="text" placeholder="الجرام / النوع">
         <input id="newPriceCount" type="number" placeholder="عدد الأفرخ بالرزمة">
-        <input id="newPricePrice" type="number" step="0.01" placeholder="السعر (جنيه)">
+        <input id="newPricePrice" type="number" step="0.01" placeholder="السعر (د.ل)">
       </div>
       <button class="btn btn-primary" onclick="addPaperPrice()">إضافة</button>
     </div>
@@ -1000,6 +1016,210 @@ async function deletePaperPrice(id){
   }catch(e){ showToast('خطأ: ' + e.message); }
 }
 
+// ---------- المحاسبة: حاسبة تسعير الشغلانات (صلاحية إدارة فقط) ----------
+let PRICING_SETTINGS = {};
+const MACHINES = {
+  quarter: {label:'ماكينة ربع فرخ', w:35, h:50, runKey:'run_quarter'},
+  half:    {label:'ماكينة نص فرخ',  w:50, h:70, runKey:'run_half'}
+};
+const MARGIN_CM = 1; // بنسة + مارجن من كل اتجاه
+
+async function loadPricingSettings(){
+  try{
+    const {data, error} = await supabaseClient.from('pricing_settings').select('*');
+    if(error) throw error;
+    PRICING_SETTINGS = {};
+    (data||[]).forEach(r => PRICING_SETTINGS[r.key] = r);
+  }catch(e){ PRICING_SETTINGS = {}; showToast('تعذر تحميل إعدادات الأسعار: ' + e.message); }
+}
+
+async function renderAccounting(){
+  const view = document.getElementById('accountingView');
+  if(!isAdmin()){ view.innerHTML = '<p class="hint">هذه الصفحة متاحة لصلاحية الإدارة فقط.</p>'; return; }
+  view.innerHTML = `<div class="hint">جاري التحميل...</div>`;
+  await Promise.all([loadPricingSettings(), loadPaperPrices()]);
+  view.innerHTML = `
+    <h3 class="section-title">إعدادات الأسعار الأساسية</h3>
+    <div id="pricingSettingsWrap" style="margin-bottom:24px;"></div>
+
+    <h3 class="section-title">حاسبة تسعير شغلانة</h3>
+    <div class="add-emp-box">
+      <div class="price-add-fields" style="grid-template-columns:repeat(4,1fr);">
+        <div class="field"><label>اسم/نوع المنتج (اختياري)</label><input id="calcProductName" type="text" placeholder="مثال: علبة أدوية"></div>
+        <div class="field"><label>مقاس الشغلة النهائي - عرض (سم)</label><input id="calcJobW" type="number" step="0.1"></div>
+        <div class="field"><label>مقاس الشغلة النهائي - ارتفاع (سم)</label><input id="calcJobH" type="number" step="0.1"></div>
+        <div class="field"><label>عدد النسخ المطلوبة</label><input id="calcCopies" type="number"></div>
+        <div class="field"><label>مقاس الفرخ الأصلي - عرض (سم)</label><input id="calcSheetW" type="number" step="0.1" value="100"></div>
+        <div class="field"><label>مقاس الفرخ الأصلي - ارتفاع (سم)</label><input id="calcSheetH" type="number" step="0.1" value="70"></div>
+        <div class="field"><label>عدد الألوان</label><input id="calcColors" type="number" value="4"></div>
+        <div class="field"><label>نوع الورق</label><select id="calcPaper"></select></div>
+      </div>
+      <label style="display:block;font-size:12px;font-weight:700;color:var(--muted);margin:14px 0 8px;">خدمات التشطيب</label>
+      <div class="finish-checks">
+        <label><input type="checkbox" id="calcTaksir"> تكسير (طي)</label>
+        <label><input type="checkbox" id="calcSharshara"> شرشرة</label>
+        <label><input type="checkbox" id="calcRega"> ريجة</label>
+        <label><input type="checkbox" id="calcTarqim"> ترقيم</label>
+        <label><input type="checkbox" id="calcCellophane"> سلوفان</label>
+        <label><input type="checkbox" id="calcBasma"> بصمة حرارية (يحتاج تحديد لاحقًا)</label>
+      </div>
+      <button class="btn btn-primary" style="margin-top:16px;" onclick="calculateJob()">احسب السعر</button>
+    </div>
+    <div id="calcResults"></div>
+  `;
+  renderPricingSettingsPanel();
+  const paperSel = document.getElementById('calcPaper');
+  paperSel.innerHTML = PAPER_PRICES.map(p =>
+    `<option value="${p.id}">${escapeHtml(p.category)} — ${escapeHtml(p.measurement||'')} ${escapeHtml(p.grammage_type||'')} (${perSheet(p)} د.ل/فرخ)</option>`
+  ).join('');
+}
+
+function renderPricingSettingsPanel(){
+  const wrap = document.getElementById('pricingSettingsWrap');
+  if(!wrap) return;
+  const rows = Object.values(PRICING_SETTINGS);
+  wrap.innerHTML = `
+    <div style="overflow-x:auto;">
+    <table class="price-table">
+      <thead><tr><th>الإعداد</th><th>القيمة</th><th></th></tr></thead>
+      <tbody>
+        ${rows.map(r => `
+          <tr>
+            <td>${escapeHtml(r.label)}</td>
+            <td><input id="setting_${r.key}" type="number" step="0.01" value="${r.value}" style="width:100px;padding:6px 8px;border:1px solid var(--line);border-radius:4px;font-family:'JetBrains Mono',monospace;"></td>
+            <td><button class="btn btn-primary btn-small" onclick="savePricingSetting('${r.key}')">حفظ</button></td>
+          </tr>`).join('')}
+      </tbody>
+    </table>
+    </div>`;
+}
+
+async function savePricingSetting(key){
+  const val = Number(document.getElementById(`setting_${key}`).value);
+  if(isNaN(val)){ showToast('قيمة غير صحيحة'); return; }
+  try{
+    const {error} = await supabaseClient.from('pricing_settings').update({value: val}).eq('key', key);
+    if(error) throw error;
+    PRICING_SETTINGS[key].value = val;
+    showToast('تم الحفظ');
+  }catch(e){ showToast('خطأ: ' + e.message); }
+}
+
+function settingVal(key, fallback){
+  return PRICING_SETTINGS[key] ? Number(PRICING_SETTINGS[key].value) : fallback;
+}
+
+// أقصى عدد تكرارات لمقاس (pieceW×pieceH) داخل مساحة (areaW×areaH)، مع تجربة الدورانين
+function maxRepeats(areaW, areaH, pieceW, pieceH){
+  const r1 = Math.floor(areaW/pieceW) * Math.floor(areaH/pieceH);
+  const r2 = Math.floor(areaW/pieceH) * Math.floor(areaH/pieceW);
+  return Math.max(r1, r2);
+}
+
+function calcForMachine(machineKey, jobW, jobH, sheetW, sheetH, copies, colors, pricePerSheet, finishPctTotal, cellophaneOn){
+  const m = MACHINES[machineKey];
+  const netW = m.w - 2*MARGIN_CM;
+  const netH = m.h - 2*MARGIN_CM;
+  const repeats = maxRepeats(netW, netH, jobW, jobH);
+  if(repeats <= 0) return {usable:false, machine:m.label};
+
+  const printedSheets = Math.ceil(copies / repeats);
+  const piecesPerOriginal = maxRepeats(sheetW, sheetH, netW, netH);
+  if(piecesPerOriginal <= 0) return {usable:false, machine:m.label, reason:'مقاس الماكينة أكبر من الفرخ الأصلي'};
+
+  const originalSheets = Math.ceil(printedSheets / piecesPerOriginal);
+  const paperCost = originalSheets * pricePerSheet;
+  const runPrice = settingVal(m.runKey, machineKey==='quarter'?250:600);
+  const runCost = colors * runPrice * (printedSheets/1000);
+
+  const baseCost = paperCost + runCost;
+  const finishAmount = baseCost * (finishPctTotal/100);
+  const cellophanePct = settingVal('cellophane_pct', 45);
+  const cellophaneAmount = cellophaneOn ? baseCost * (cellophanePct/100) : 0;
+  const total = baseCost + finishAmount + cellophaneAmount;
+
+  return {
+    usable:true, machine:m.label, netW, netH, repeats, printedSheets, piecesPerOriginal,
+    originalSheets, paperCost, runCost, finishAmount, cellophaneAmount, total
+  };
+}
+
+function calculateJob(){
+  const productName = document.getElementById('calcProductName').value.trim();
+  const jobW = Number(document.getElementById('calcJobW').value);
+  const jobH = Number(document.getElementById('calcJobH').value);
+  const copies = Number(document.getElementById('calcCopies').value);
+  const sheetW = Number(document.getElementById('calcSheetW').value);
+  const sheetH = Number(document.getElementById('calcSheetH').value);
+  const colors = Number(document.getElementById('calcColors').value);
+  const paperId = Number(document.getElementById('calcPaper').value);
+
+  if(!jobW || !jobH || !copies || !sheetW || !sheetH || !colors || !paperId){
+    showToast('من فضلك أكمل كل الحقول المطلوبة');
+    return;
+  }
+  const paper = PAPER_PRICES.find(p=>p.id===paperId);
+  const pricePerSheet = paper ? (Number(paper.price)/Number(paper.package_size)) : 0;
+
+  // القاعدة الإلزامية: منتج بيتطوى/يتقفل -> تكسير تلقائي
+  const autoTaksir = /علبة|بوكس|كيس/.test(productName);
+  let taksir = document.getElementById('calcTaksir').checked || autoTaksir;
+  const sharshara = document.getElementById('calcSharshara').checked;
+  const rega = document.getElementById('calcRega').checked;
+  const tarqim = document.getElementById('calcTarqim').checked;
+  const cellophaneOn = document.getElementById('calcCellophane').checked;
+  const basmaOn = document.getElementById('calcBasma').checked;
+
+  const finishStepPct = settingVal('finish_pct_default', 12);
+  const finishMaxPct = settingVal('finish_pct_max', 25);
+  const stepsCount = [taksir, sharshara, rega, tarqim].filter(Boolean).length;
+  const finishPctTotal = Math.min(stepsCount * finishStepPct, finishMaxPct);
+
+  const quarter = calcForMachine('quarter', jobW, jobH, sheetW, sheetH, copies, colors, pricePerSheet, finishPctTotal, cellophaneOn);
+  const half = calcForMachine('half', jobW, jobH, sheetW, sheetH, copies, colors, pricePerSheet, finishPctTotal, cellophaneOn);
+
+  renderPricingResults({quarter, half, autoTaksir, basmaOn, finishPctTotal, stepsCount});
+}
+
+function machineResultCard(r){
+  if(!r.usable){
+    return `<div class="calc-result-card unusable">
+      <h4>${escapeHtml(r.machine)}</h4>
+      <p class="hint">غير متاحة لهذه الشغلة${r.reason ? ' — ' + escapeHtml(r.reason) : ' (المقاس أكبر من مساحة الماكينة الصافية)'}</p>
+    </div>`;
+  }
+  return `<div class="calc-result-card">
+    <h4>${escapeHtml(r.machine)}</h4>
+    <div class="calc-row"><span>المساحة الصافية</span><bdi>${r.netW}×${r.netH} سم</bdi></div>
+    <div class="calc-row"><span>عدد التكرارات</span><bdi>${r.repeats}</bdi></div>
+    <div class="calc-row"><span>عدد الأوراق المطبوعة فعليًا</span><bdi>${r.printedSheets}</bdi></div>
+    <div class="calc-row"><span>قطع لكل فرخ أصلي</span><bdi>${r.piecesPerOriginal}</bdi></div>
+    <div class="calc-row"><span>عدد الأفرخ الأصلية المطلوبة</span><bdi>${r.originalSheets}</bdi></div>
+    <div class="calc-row"><span>تكلفة الورق</span><bdi>${r.paperCost.toFixed(2)} د.ل</bdi></div>
+    <div class="calc-row"><span>تكلفة المصنعية (الدورات)</span><bdi>${r.runCost.toFixed(2)} د.ل</bdi></div>
+    <div class="calc-row"><span>تكلفة التشطيبات النسبية</span><bdi>${r.finishAmount.toFixed(2)} د.ل</bdi></div>
+    ${r.cellophaneAmount ? `<div class="calc-row"><span>تكلفة السلوفان</span><bdi>${r.cellophaneAmount.toFixed(2)} د.ل</bdi></div>` : ''}
+    <div class="calc-row calc-total"><span>الإجمالي</span><bdi>${r.total.toFixed(2)} د.ل</bdi></div>
+  </div>`;
+}
+
+function renderPricingResults(res){
+  const el = document.getElementById('calcResults');
+  const notes = [];
+  if(res.autoTaksir) notes.push('⚠️ تم إضافة "تكسير" تلقائيًا لأن اسم المنتج يوحي بمنتج بيتطوى/يتقفل.');
+  if(res.basmaOn) notes.push('⚠️ "بصمة حرارية" لسه محتاجة تحديد السعر والمعادلة منك — مش متضمنة في الإجمالي.');
+  if(res.stepsCount > 0) notes.push(`نسبة التشطيبات المستخدمة: ${res.finishPctTotal}% (تقديرية، راجعها قبل الاعتماد النهائي).`);
+
+  el.innerHTML = `
+    <h3 class="section-title" style="margin-top:24px;">نتيجة المقارنة</h3>
+    ${notes.length ? `<div class="hint" style="margin-bottom:12px;">${notes.map(n=>`<div>${n}</div>`).join('')}</div>` : ''}
+    <div class="calc-results-grid">
+      ${machineResultCard(res.quarter)}
+      ${machineResultCard(res.half)}
+    </div>
+  `;
+}
+
 let formSubTab = 'create';
 
 function switchTab(tab){
@@ -1007,18 +1227,22 @@ function switchTab(tab){
   document.getElementById('tabDashboard').classList.toggle('active', tab==='dashboard');
   document.getElementById('tabForm').classList.toggle('active', tab==='form');
   document.getElementById('tabEmployees').classList.toggle('active', tab==='employees');
+  document.getElementById('tabPaperPrices').classList.toggle('active', tab==='paperprices');
   document.getElementById('tabAccounting').classList.toggle('active', tab==='accounting');
   document.getElementById('bnDashboard').classList.toggle('active', tab==='dashboard');
   document.getElementById('bnForm').classList.toggle('active', tab==='form');
   document.getElementById('bnEmployees').classList.toggle('active', tab==='employees');
+  document.getElementById('bnPaperPrices').classList.toggle('active', tab==='paperprices');
   document.getElementById('bnAccounting').classList.toggle('active', tab==='accounting');
   document.getElementById('dashboardView').style.display = tab==='dashboard' ? 'block':'none';
   document.getElementById('formView').style.display = tab==='form' ? 'block':'none';
   document.getElementById('employeesView').style.display = tab==='employees' ? 'block':'none';
+  document.getElementById('paperPricesView').style.display = tab==='paperprices' ? 'block':'none';
   document.getElementById('accountingView').style.display = tab==='accounting' ? 'block':'none';
   if(tab==='dashboard') renderDashboard();
   if(tab==='form') renderForm();
   if(tab==='employees') renderEmployees();
+  if(tab==='paperprices') renderPaperPriceList();
   if(tab==='accounting') renderAccounting();
 }
 function switchFormSubTab(sub){
