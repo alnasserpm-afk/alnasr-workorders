@@ -302,6 +302,40 @@
   }
   .finish-checks{display:flex;flex-wrap:wrap;gap:14px;font-size:13px;}
   .finish-checks label{display:flex;align-items:center;gap:6px;cursor:pointer;}
+
+  /* صفوف إعدادات الأسعار - كارت مكدّس بدل جدول ضيق */
+  .setting-row{
+    display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+    background:var(--card);border:1px solid var(--line);border-radius:6px;padding:12px 14px;margin-bottom:8px;
+  }
+  .setting-label{font-size:12.5px;color:#3a3833;flex:1;min-width:180px;line-height:1.5;}
+  .setting-controls{display:flex;gap:8px;align-items:center;flex-shrink:0;}
+  .setting-controls input{
+    width:80px;padding:8px;border:1px solid var(--line);border-radius:5px;
+    font-family:'JetBrains Mono',monospace;font-size:14px;text-align:center;
+  }
+
+  /* حقول حاسبة التسعير - شبكة متجاوبة حقيقية */
+  .calc-fields{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px;margin-bottom:6px;}
+  .calc-fields .field label{font-size:11.5px;line-height:1.4;display:block;margin-bottom:5px;}
+  .calc-fields .field input, .calc-fields .field select{
+    width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:5px;
+    font-family:'Tajawal',sans-serif;font-size:13.5px;min-width:0;
+  }
+  @media (max-width:520px){
+    .calc-fields{grid-template-columns:1fr 1fr;}
+  }
+
+  /* خدمات التشطيب - كروت قابلة للمس بدل قائمة أفقية */
+  .finish-checks-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;}
+  .finish-checks-grid label{
+    display:flex;align-items:center;gap:9px;background:#fff;border:1px solid var(--line);border-radius:6px;
+    padding:11px 12px;font-size:12.5px;cursor:pointer;-webkit-tap-highlight-color:transparent;
+  }
+  .finish-checks-grid input[type="checkbox"]{width:17px;height:17px;flex-shrink:0;accent-color:var(--press);}
+  @media (max-width:520px){
+    .finish-checks-grid{grid-template-columns:1fr 1fr;}
+  }
   .calc-results-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
   @media (max-width:640px){ .calc-results-grid{grid-template-columns:1fr;} }
   .calc-result-card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:16px;}
@@ -1044,7 +1078,7 @@ async function renderAccounting(){
 
     <h3 class="section-title">حاسبة تسعير شغلانة</h3>
     <div class="add-emp-box">
-      <div class="price-add-fields" style="grid-template-columns:repeat(4,1fr);">
+      <div class="calc-fields">
         <div class="field"><label>اسم/نوع المنتج (اختياري)</label><input id="calcProductName" type="text" placeholder="مثال: علبة أدوية"></div>
         <div class="field"><label>مقاس الشغلة النهائي - عرض (سم)</label><input id="calcJobW" type="number" step="0.1"></div>
         <div class="field"><label>مقاس الشغلة النهائي - ارتفاع (سم)</label><input id="calcJobH" type="number" step="0.1"></div>
@@ -1055,7 +1089,7 @@ async function renderAccounting(){
         <div class="field"><label>نوع الورق</label><select id="calcPaper"></select></div>
       </div>
       <label style="display:block;font-size:12px;font-weight:700;color:var(--muted);margin:14px 0 8px;">خدمات التشطيب</label>
-      <div class="finish-checks">
+      <div class="finish-checks-grid">
         <label><input type="checkbox" id="calcTaksir"> تكسير (طي)</label>
         <label><input type="checkbox" id="calcSharshara"> شرشرة</label>
         <label><input type="checkbox" id="calcRega"> ريجة</label>
@@ -1078,20 +1112,14 @@ function renderPricingSettingsPanel(){
   const wrap = document.getElementById('pricingSettingsWrap');
   if(!wrap) return;
   const rows = Object.values(PRICING_SETTINGS);
-  wrap.innerHTML = `
-    <div style="overflow-x:auto;">
-    <table class="price-table">
-      <thead><tr><th>الإعداد</th><th>القيمة</th><th></th></tr></thead>
-      <tbody>
-        ${rows.map(r => `
-          <tr>
-            <td>${escapeHtml(r.label)}</td>
-            <td><input id="setting_${r.key}" type="number" step="0.01" value="${r.value}" style="width:100px;padding:6px 8px;border:1px solid var(--line);border-radius:4px;font-family:'JetBrains Mono',monospace;"></td>
-            <td><button class="btn btn-primary btn-small" onclick="savePricingSetting('${r.key}')">حفظ</button></td>
-          </tr>`).join('')}
-      </tbody>
-    </table>
-    </div>`;
+  wrap.innerHTML = rows.map(r => `
+    <div class="setting-row">
+      <div class="setting-label">${escapeHtml(r.label)}</div>
+      <div class="setting-controls">
+        <input id="setting_${r.key}" type="number" step="0.01" value="${r.value}">
+        <button class="btn btn-primary btn-small" onclick="savePricingSetting('${r.key}')">حفظ</button>
+      </div>
+    </div>`).join('');
 }
 
 async function savePricingSetting(key){
