@@ -497,6 +497,7 @@
 <nav class="tabs">
   <button id="tabDashboard" class="active" onclick="switchTab('dashboard')">لوحة المتابعة</button>
   <button id="tabForm" onclick="switchTab('form')">أمر عمل جديد</button>
+  <button id="tabArchive" onclick="switchTab('archive')">الأرشيف</button>
   <button id="tabEmployees" onclick="switchTab('employees')" style="display:none;">الموظفين</button>
   <button id="tabPaperPrices" onclick="switchTab('paperprices')" style="display:none;">أسعار الورق</button>
   <button id="tabAccounting" onclick="switchTab('accounting')" style="display:none;">المحاسبة</button>
@@ -508,6 +509,7 @@
   <div class="bottom-nav-inner">
     <button id="bnDashboard" class="active" onclick="switchTab('dashboard')"><span class="ic">🗂️</span>لوحة المتابعة</button>
     <button id="bnForm" onclick="switchTab('form')"><span class="ic">➕</span>أمر جديد</button>
+    <button id="bnArchive" onclick="switchTab('archive')"><span class="ic">🗄️</span>الأرشيف</button>
     <button id="bnEmployees" onclick="switchTab('employees')" style="display:none;"><span class="ic">👥</span>الموظفين</button>
     <button id="bnPaperPrices" onclick="switchTab('paperprices')" style="display:none;"><span class="ic">📄</span>أسعار الورق</button>
     <button id="bnAccounting" onclick="switchTab('accounting')" style="display:none;"><span class="ic">💰</span>المحاسبة</button>
@@ -517,6 +519,7 @@
 <main>
   <div id="dashboardView"></div>
   <div id="formView" style="display:none;"></div>
+  <div id="archiveView" style="display:none;"></div>
   <div id="employeesView" style="display:none;"></div>
   <div id="paperPricesView" style="display:none;"></div>
   <div id="accountingView" style="display:none;"></div>
@@ -618,7 +621,6 @@ let formType = 'paper';
 let dashFilter = 'all';
 let dashSearch = '';
 let dashStatusFilter = 'all';
-let dashShowCompleted = false;
 let plasticItemCounter = 0;
 let capsItemCounter = 0;
 let pendingDesignImage = '';
@@ -1270,21 +1272,25 @@ function switchTab(tab){
   currentTab = tab;
   document.getElementById('tabDashboard').classList.toggle('active', tab==='dashboard');
   document.getElementById('tabForm').classList.toggle('active', tab==='form');
+  document.getElementById('tabArchive').classList.toggle('active', tab==='archive');
   document.getElementById('tabEmployees').classList.toggle('active', tab==='employees');
   document.getElementById('tabPaperPrices').classList.toggle('active', tab==='paperprices');
   document.getElementById('tabAccounting').classList.toggle('active', tab==='accounting');
   document.getElementById('bnDashboard').classList.toggle('active', tab==='dashboard');
   document.getElementById('bnForm').classList.toggle('active', tab==='form');
+  document.getElementById('bnArchive').classList.toggle('active', tab==='archive');
   document.getElementById('bnEmployees').classList.toggle('active', tab==='employees');
   document.getElementById('bnPaperPrices').classList.toggle('active', tab==='paperprices');
   document.getElementById('bnAccounting').classList.toggle('active', tab==='accounting');
   document.getElementById('dashboardView').style.display = tab==='dashboard' ? 'block':'none';
   document.getElementById('formView').style.display = tab==='form' ? 'block':'none';
+  document.getElementById('archiveView').style.display = tab==='archive' ? 'block':'none';
   document.getElementById('employeesView').style.display = tab==='employees' ? 'block':'none';
   document.getElementById('paperPricesView').style.display = tab==='paperprices' ? 'block':'none';
   document.getElementById('accountingView').style.display = tab==='accounting' ? 'block':'none';
   if(tab==='dashboard') renderDashboard();
   if(tab==='form') renderForm();
+  if(tab==='archive') renderArchive();
   if(tab==='employees') renderEmployees();
   if(tab==='paperprices') renderPaperPriceList();
   if(tab==='accounting') renderAccounting();
@@ -1340,19 +1346,9 @@ function getFilteredOrders(){
   return ORDERS.filter(o =>
     (dashFilter==='all' || o.type===dashFilter) &&
     (dashStatusFilter==='all' || o.status===dashStatusFilter) &&
-    (dashShowCompleted || o.status!=='تم التسليم') &&
+    o.status!=='تم التسليم' &&
     matchesSearch(o, dashSearch)
   );
-}
-function toggleShowCompleted(){
-  dashShowCompleted = !dashShowCompleted;
-  renderDashboard();
-}
-function completedCount(){
-  return ORDERS.filter(o =>
-    (dashFilter==='all' || o.type===dashFilter) &&
-    o.status==='تم التسليم'
-  ).length;
 }
 
 function exportExcel(){
@@ -1436,6 +1432,26 @@ function checkOverdueNotifications(force){
   });
 }
 
+function buildOrderCard(o){
+  const overdue = isOverdue(o);
+  const stages = stagesFor(o.type);
+  const stageIdx = stages.findIndex(s=>s.key===o.status);
+  const dots = stages.map((s,i)=>`<span class="${i<=stageIdx ? s.dot : ''}"></span>`).join('');
+  const lastEvent = (o.history && o.history.length) ? o.history[o.history.length-1] : null;
+  return `
+    <div class="card ${o.type==='plastic'?'plastic':''}" onclick="openDetail('${o.type}',${o.id})">
+      <div class="orderno mono"><span class="type-badge ${o.type==='plastic'?'plastic':''}">${o.type==='plastic'?'بلاستيك':'ورقي'}</span> ${orderLabelHtml(o)}</div>
+      <div class="client">${escapeHtml(o.clientName||'—')}</div>
+      <div class="work">${escapeHtml(o.workName||'—')} ${o.quantity?('· '+escapeHtml(o.quantity)):''}</div>
+      <div class="cmyk-dots">${dots}</div>
+      <div class="card-footer">
+        <span class="status-pill">${escapeHtml(o.status)}</span>
+        ${o.paused ? '<span class="overdue-badge" style="background:#c78a00;">⏸ متوقف</span>' : (overdue ? '<span class="overdue-badge">متأخر</span>' : (o.deliveryDate ? `<span class="mono">${escapeHtml(o.deliveryDate)}</span>` : ''))}
+      </div>
+      ${lastEvent ? `<div class="last-modified"><bdi>${escapeHtml(lastEvent.ts)}</bdi> — آخر تعديل: <b>${escapeHtml(lastEvent.actor||'—')}</b></div>` : ''}
+    </div>`;
+}
+
 function renderDashboard(){
   const el = document.getElementById('dashboardView');
   const visible = getFilteredOrders();
@@ -1451,42 +1467,48 @@ function renderDashboard(){
       <button class="btn-export" onclick="exportPrint()">🖨 طباعة / PDF</button>
       <button class="btn-export" onclick="requestNotifyPermission()" id="notifyBtn">🔔 تنبيهات التأخير</button>
     </div>`;
-  const hiddenCompleted = completedCount();
   const filterHtml = `<div class="filter-row">
       <button class="${dashFilter==='all'?'active':''}" onclick="setFilter('all')">الكل</button>
       <button class="${dashFilter==='paper'?'active':''}" onclick="setFilter('paper')">ورقي</button>
       <button class="${dashFilter==='plastic'?'active':''}" onclick="setFilter('plastic')">بلاستيكي</button>
-      <button class="${dashShowCompleted?'active':''}" onclick="toggleShowCompleted()" style="margin-inline-start:auto;">
-        ${dashShowCompleted ? 'إخفاء المكتملة' : `عرض المكتملة${hiddenCompleted ? ' ('+hiddenCompleted+')' : ''}`}
-      </button>
     </div>`;
   if(visible.length === 0){
     el.innerHTML = toolbarHtml + filterHtml + `<div id="empty">لا توجد أوامر عمل مطابقة.</div><div id="printArea"></div>`;
     return;
   }
   const sorted = [...visible].sort((a,b)=>b.id-a.id);
-  el.innerHTML = toolbarHtml + filterHtml + `<div class="grid">` + sorted.map(o=>{
-    const overdue = isOverdue(o);
-    const stages = stagesFor(o.type);
-    const stageIdx = stages.findIndex(s=>s.key===o.status);
-    const dots = stages.map((s,i)=>`<span class="${i<=stageIdx ? s.dot : ''}"></span>`).join('');
-    const lastEvent = (o.history && o.history.length) ? o.history[o.history.length-1] : null;
-    return `
-      <div class="card ${o.type==='plastic'?'plastic':''}" onclick="openDetail('${o.type}',${o.id})">
-        <div class="orderno mono"><span class="type-badge ${o.type==='plastic'?'plastic':''}">${o.type==='plastic'?'بلاستيك':'ورقي'}</span> ${orderLabelHtml(o)}</div>
-        <div class="client">${escapeHtml(o.clientName||'—')}</div>
-        <div class="work">${escapeHtml(o.workName||'—')} ${o.quantity?('· '+escapeHtml(o.quantity)):''}</div>
-        <div class="cmyk-dots">${dots}</div>
-        <div class="card-footer">
-          <span class="status-pill">${escapeHtml(o.status)}</span>
-          ${o.paused ? '<span class="overdue-badge" style="background:#c78a00;">⏸ متوقف</span>' : (overdue ? '<span class="overdue-badge">متأخر</span>' : (o.deliveryDate ? `<span class="mono">${escapeHtml(o.deliveryDate)}</span>` : ''))}
-        </div>
-        ${lastEvent ? `<div class="last-modified"><bdi>${escapeHtml(lastEvent.ts)}</bdi> — آخر تعديل: <b>${escapeHtml(lastEvent.actor||'—')}</b></div>` : ''}
-      </div>`;
-  }).join('') + `</div><div id="printArea"></div>`;
+  el.innerHTML = toolbarHtml + filterHtml + `<div class="grid">` + sorted.map(buildOrderCard).join('') + `</div><div id="printArea"></div>`;
   checkOverdueNotifications();
 }
 function setFilter(f){ dashFilter = f; renderDashboard(); }
+
+let archiveFilter = 'all';
+let archiveSearch = '';
+function setArchiveSearch(v){ archiveSearch = v; renderArchive(); }
+function setArchiveFilter(f){ archiveFilter = f; renderArchive(); }
+function renderArchive(){
+  const el = document.getElementById('archiveView');
+  const visible = ORDERS.filter(o =>
+    o.status==='تم التسليم' &&
+    (archiveFilter==='all' || o.type===archiveFilter) &&
+    matchesSearch(o, archiveSearch)
+  );
+  const toolbarHtml = `
+    <div class="toolbar">
+      <input type="text" placeholder="بحث بالاسم أو الشغلانة أو الرقم..." value="${escapeHtml(archiveSearch)}" oninput="setArchiveSearch(this.value)">
+    </div>`;
+  const filterHtml = `<div class="filter-row">
+      <button class="${archiveFilter==='all'?'active':''}" onclick="setArchiveFilter('all')">الكل</button>
+      <button class="${archiveFilter==='paper'?'active':''}" onclick="setArchiveFilter('paper')">ورقي</button>
+      <button class="${archiveFilter==='plastic'?'active':''}" onclick="setArchiveFilter('plastic')">بلاستيكي</button>
+    </div>`;
+  if(visible.length === 0){
+    el.innerHTML = toolbarHtml + filterHtml + `<div id="empty">لا توجد أوامر مكتملة بعد.</div>`;
+    return;
+  }
+  const sorted = [...visible].sort((a,b)=>b.id-a.id);
+  el.innerHTML = toolbarHtml + filterHtml + `<div class="grid">` + sorted.map(buildOrderCard).join('') + `</div>`;
+}
 
 function fieldOptionsRow(name, options, groupLabel){
   return `<div class="field full"><label>${groupLabel}</label><div class="choice-row">` +
