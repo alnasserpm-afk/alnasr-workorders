@@ -618,6 +618,7 @@ let formType = 'paper';
 let dashFilter = 'all';
 let dashSearch = '';
 let dashStatusFilter = 'all';
+let dashShowCompleted = false;
 let plasticItemCounter = 0;
 let capsItemCounter = 0;
 let pendingDesignImage = '';
@@ -1339,8 +1340,19 @@ function getFilteredOrders(){
   return ORDERS.filter(o =>
     (dashFilter==='all' || o.type===dashFilter) &&
     (dashStatusFilter==='all' || o.status===dashStatusFilter) &&
+    (dashShowCompleted || o.status!=='تم التسليم') &&
     matchesSearch(o, dashSearch)
   );
+}
+function toggleShowCompleted(){
+  dashShowCompleted = !dashShowCompleted;
+  renderDashboard();
+}
+function completedCount(){
+  return ORDERS.filter(o =>
+    (dashFilter==='all' || o.type===dashFilter) &&
+    o.status==='تم التسليم'
+  ).length;
 }
 
 function exportExcel(){
@@ -1439,10 +1451,14 @@ function renderDashboard(){
       <button class="btn-export" onclick="exportPrint()">🖨 طباعة / PDF</button>
       <button class="btn-export" onclick="requestNotifyPermission()" id="notifyBtn">🔔 تنبيهات التأخير</button>
     </div>`;
+  const hiddenCompleted = completedCount();
   const filterHtml = `<div class="filter-row">
       <button class="${dashFilter==='all'?'active':''}" onclick="setFilter('all')">الكل</button>
       <button class="${dashFilter==='paper'?'active':''}" onclick="setFilter('paper')">ورقي</button>
       <button class="${dashFilter==='plastic'?'active':''}" onclick="setFilter('plastic')">بلاستيكي</button>
+      <button class="${dashShowCompleted?'active':''}" onclick="toggleShowCompleted()" style="margin-inline-start:auto;">
+        ${dashShowCompleted ? 'إخفاء المكتملة' : `عرض المكتملة${hiddenCompleted ? ' ('+hiddenCompleted+')' : ''}`}
+      </button>
     </div>`;
   if(visible.length === 0){
     el.innerHTML = toolbarHtml + filterHtml + `<div id="empty">لا توجد أوامر عمل مطابقة.</div><div id="printArea"></div>`;
