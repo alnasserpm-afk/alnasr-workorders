@@ -104,6 +104,8 @@
   .card .work{font-size:13px;color:#54514a;margin-bottom:12px;}
   .status-pill{display:inline-block;font-size:11px;font-weight:700;padding:4px 12px;border-radius:20px;background:#eee;color:#333;}
   .card-footer{display:flex;justify-content:space-between;align-items:center;margin-top:14px;padding-top:12px;border-top:1px dashed var(--line);font-size:11px;color:var(--muted);}
+  .last-modified{margin-top:8px;font-size:10.5px;color:#a8a498;}
+  .last-modified b{color:#6b675e;font-weight:700;}
   .overdue-badge{background:var(--warn);color:#fff;font-size:10px;font-weight:800;padding:3px 9px;border-radius:20px;}
 
   .section{background:var(--card);border:1px solid var(--line);border-radius:8px;margin-bottom:16px;overflow:hidden;}
@@ -638,6 +640,26 @@ function showToast(msg){
   t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'), 2200);
 }
+const PAPER_EDIT_FIELDS = [
+  ['clientName','اسم العميل'], ['clientType','نوع العميل'], ['workType','نوع العمل'], ['workName','اسم العمل'],
+  ['quantity','الكمية المطلوبة'], ['finalSize','المقاس النهائي'], ['printQty','كمية الطباعة'],
+  ['colors','الألوان (افصل بينهم بفاصلة)'], ['extraColors','ألوان إضافية'], ['sides','أوجه الطباعة'], ['clip','طبع وقلب'],
+  ['plateCount','عدد الزنكات'], ['numberingStart','الترقيم من'], ['numberingEnd','الترقيم إلى'], ['printMachine','الماكينة'],
+  ['paperType','نوع الورق'], ['paperColor','لون الورق'], ['sheetMeasure','الشيت'], ['sheetsNeeded','عدد الأفرخ'],
+  ['permitNumber','إذن صرف رقم'], ['cutSize','مقاس القص'], ['copiesCount','عدد النسخ'], ['copiesType','نوع النسخ'],
+  ['pagesPerBook','عدد الورق بالدفتر'], ['bookCount','عدد الدفاتر'],
+  ['finishing','التشطيب (افصل بينهم بفاصلة)'], ['cellophaneType','نوع السلوفان'], ['cellophaneSides','أوجه السلوفان'],
+  ['respAssembly','مسؤول التجميع'], ['respCellophane','مسؤول السوفان'], ['respPrinting','مسؤول الطباعة'], ['respCutting','مسؤول القص'],
+  ['deliveryDate','تاريخ التسليم'], ['deliveryNoteNumber','رقم بيان التسليم'], ['signature','التوقيع'],
+  ['otherInfo','معلومات أخرى'], ['notes','ملاحظات']
+];
+const PLASTIC_EDIT_FIELDS = [
+  ['clientName','اسم الشركة/العميل'], ['orderDate','تاريخ الأمر'], ['startDateTime','ساعة وتاريخ البدء'],
+  ['endDateTime','ساعة وتاريخ الانتهاء'], ['wasteQty','كمية الفاقد'], ['technician','اسم الفني'],
+  ['assistant1','مساعد الفني 1'], ['assistant2','مساعد الفني 2'], ['generalNote','ملاحظة عامة']
+];
+const ARRAY_FIELDS = ['colors','finishing'];
+
 function orderLabel(o){
   return (o.type==='plastic' ? 'ب' : 'و') + '#' + o.id;
 }
@@ -1439,6 +1461,7 @@ function renderDashboard(){
     const stages = stagesFor(o.type);
     const stageIdx = stages.findIndex(s=>s.key===o.status);
     const dots = stages.map((s,i)=>`<span class="${i<=stageIdx ? s.dot : ''}"></span>`).join('');
+    const lastEvent = (o.history && o.history.length) ? o.history[o.history.length-1] : null;
     return `
       <div class="card ${o.type==='plastic'?'plastic':''}" onclick="openDetail('${o.type}',${o.id})">
         <div class="orderno mono"><span class="type-badge ${o.type==='plastic'?'plastic':''}">${o.type==='plastic'?'بلاستيك':'ورقي'}</span> ${orderLabelHtml(o)}</div>
@@ -1449,6 +1472,7 @@ function renderDashboard(){
           <span class="status-pill">${escapeHtml(o.status)}</span>
           ${o.paused ? '<span class="overdue-badge" style="background:#c78a00;">⏸ متوقف</span>' : (overdue ? '<span class="overdue-badge">متأخر</span>' : (o.deliveryDate ? `<span class="mono">${escapeHtml(o.deliveryDate)}</span>` : ''))}
         </div>
+        ${lastEvent ? `<div class="last-modified"><bdi>${escapeHtml(lastEvent.ts)}</bdi> — آخر تعديل: <b>${escapeHtml(lastEvent.actor||'—')}</b></div>` : ''}
       </div>`;
   }).join('') + `</div><div id="printArea"></div>`;
   checkOverdueNotifications();
@@ -1907,7 +1931,10 @@ function openDetail(type, id){
           <div style="font-size:17px;font-weight:800;">${escapeHtml(o.clientName)}</div>
           <div style="font-size:12px;color:#cfcbc0;">${escapeHtml(o.workName||'')}</div>
         </div>
-        <button class="x" onclick="closeDetail()">✕</button>
+        <div style="display:flex;gap:8px;align-items:flex-start;position:relative;z-index:1;">
+          <button class="btn btn-ghost btn-small" style="color:#f4f1ea;border-color:#4a4636;" onclick="openEditForm('${o.type}',${o.id})">✎ تعديل البيانات</button>
+          <button class="x" onclick="closeDetail()">✕</button>
+        </div>
       </div>
       <div class="modal-body">
         ${overdue ? '<div style="background:#fdeceb;color:var(--warn);padding:8px 12px;border-radius:4px;font-size:12.5px;font-weight:700;margin-bottom:12px;">⚠ هذا الأمر متأخر عن تاريخ التسليم المحدد</div>' : ''}
@@ -1954,6 +1981,81 @@ function openDetail(type, id){
 }
 
 function closeDetail(){ document.getElementById('modalRoot').innerHTML = ''; }
+
+function openEditForm(type, id){
+  const o = ORDERS.find(x=>x.type===type && x.id===id);
+  if(!o) return;
+  const fields = type==='paper' ? PAPER_EDIT_FIELDS : PLASTIC_EDIT_FIELDS;
+  const rowsHtml = fields.map(([key,label]) => {
+    let val = o[key];
+    if(ARRAY_FIELDS.includes(key)) val = (val||[]).join(', ');
+    return `<div class="field">
+      <label>${escapeHtml(label)}</label>
+      <input type="text" id="edit_${key}" value="${escapeHtml(val||'')}">
+    </div>`;
+  }).join('');
+
+  const modalRoot = document.getElementById('modalRoot');
+  modalRoot.innerHTML = `
+  <div class="modal-backdrop" onclick="if(event.target===this) closeDetail()">
+    <div class="modal">
+      <div class="modal-head">
+        <div>
+          <div class="mono" style="font-size:12px;color:#cfcbc0;">تعديل بيانات — ${o.type==='plastic'?'أمر عمل بلاستيك':'أمر عمل ورقي'} ${orderLabelHtml(o)}</div>
+          <div style="font-size:17px;font-weight:800;">${escapeHtml(o.clientName)}</div>
+        </div>
+        <button class="x" onclick="openDetail('${type}',${id})">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="hint" style="margin-bottom:14px;">عدّل الحقول اللي محتاجة تصحيح، والباقي سيبه زي ما هو. أي تعديل هيتسجل في سجل الأحداث باسمك وتاريخه.</div>
+        <div class="section">
+          <h3>البيانات القابلة للتعديل</h3>
+          <div class="body">${rowsHtml}</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary ${type==='plastic'?'plastic':''}" onclick="saveEditForm('${type}',${id})">حفظ التعديلات</button>
+        <button class="btn btn-ghost" onclick="openDetail('${type}',${id})">إلغاء</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function saveEditForm(type, id){
+  const o = ORDERS.find(x=>x.type===type && x.id===id);
+  if(!o) return;
+  const fields = type==='paper' ? PAPER_EDIT_FIELDS : PLASTIC_EDIT_FIELDS;
+  const changedLabels = [];
+  fields.forEach(([key,label]) => {
+    const input = document.getElementById(`edit_${key}`);
+    if(!input) return;
+    let newVal = input.value.trim();
+    let oldVal = o[key];
+    if(ARRAY_FIELDS.includes(key)){
+      const newArr = newVal ? newVal.split(',').map(s=>s.trim()).filter(Boolean) : [];
+      const oldArr = oldVal || [];
+      if(JSON.stringify(newArr) !== JSON.stringify(oldArr)){
+        changedLabels.push(label);
+        o[key] = newArr;
+      }
+    }else{
+      if((oldVal||'') !== newVal){
+        changedLabels.push(label);
+        o[key] = newVal;
+      }
+    }
+  });
+  if(changedLabels.length === 0){
+    showToast('لا يوجد تعديل فعلي');
+    openDetail(type, id);
+    return;
+  }
+  o.history.push({ts: nowStamp(), event:`تم تعديل البيانات: ${changedLabels.join('، ')}`, actor: getActor()});
+  await saveOrders();
+  showToast('تم حفظ التعديلات');
+  openDetail(type, id);
+  renderDashboard();
+}
 
 async function updateProgress(type, id){
   const input = document.getElementById('progressInput_'+type+'_'+id);
