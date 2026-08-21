@@ -7,6 +7,7 @@
 <link rel="manifest" href="./manifest.json">
 <link rel="apple-touch-icon" href="./icon-192.png">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <title>متابعة أوامر العمل — النصر المتحدة</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
@@ -392,7 +393,7 @@
   /* ---------- منطقة الطباعة (مخفية على الشاشة، تظهر عند الطباعة فقط) ---------- */
   #printArea{ display:none; }
   @media print{
-    header, nav.tabs, .toolbar, .filter-row, #loginOverlay{ display:none !important; }
+    header, nav.tabs, .toolbar, .filter-row, #loginOverlay, .modal-backdrop, .bottom-nav, .fab{ display:none !important; }
     #dashboardView > .grid{ display:none !important; }
     #printArea{ display:block !important; }
     #printArea table{ width:100%; border-collapse:collapse; font-family:'Tajawal',sans-serif; }
@@ -744,6 +745,22 @@ async function enterApp(){
   await loadOrders();
   await loadDaily();
   renderDashboard();
+  openDeepLinkIfAny();
+}
+
+function openDeepLinkIfAny(){
+  const params = new URLSearchParams(location.search);
+  const type = params.get('type');
+  const id = Number(params.get('id'));
+  if(type && id){
+    const exists = ORDERS.find(o=>o.type===type && o.id===id);
+    if(exists){
+      openDetail(type, id);
+    }else{
+      showToast('لم يتم العثور على الأمر المطلوب');
+    }
+    history.replaceState(null, '', location.pathname);
+  }
 }
 
 async function tryAutoLogin(){
@@ -1964,6 +1981,7 @@ function openDetail(type, id){
         </div>
         <div style="display:flex;gap:8px;align-items:flex-start;position:relative;z-index:1;">
           <button class="btn btn-ghost btn-small" style="color:#f4f1ea;border-color:#4a4636;" onclick="openEditForm('${o.type}',${o.id})">✎ تعديل البيانات</button>
+          <button class="btn btn-ghost btn-small" style="color:#f4f1ea;border-color:#4a4636;" onclick="showOrderQR('${o.type}',${o.id})">▦ QR</button>
           <button class="x" onclick="closeDetail()">✕</button>
         </div>
       </div>
@@ -2012,6 +2030,58 @@ function openDetail(type, id){
 }
 
 function closeDetail(){ document.getElementById('modalRoot').innerHTML = ''; }
+
+function orderDeepLink(type, id){
+  const base = location.origin + location.pathname;
+  return `${base}?type=${type}&id=${id}`;
+}
+
+function showOrderQR(type, id){
+  const o = ORDERS.find(x=>x.type===type && x.id===id);
+  if(!o) return;
+  const modalRoot = document.getElementById('modalRoot');
+  modalRoot.innerHTML = `
+  <div class="modal-backdrop" onclick="if(event.target===this) openDetail('${type}',${id})">
+    <div class="modal" style="max-width:340px;">
+      <div class="modal-head">
+        <div style="font-size:15px;font-weight:800;">QR أمر العمل ${orderLabelHtml(o)}</div>
+        <button class="x" onclick="openDetail('${type}',${id})">✕</button>
+      </div>
+      <div class="modal-body" style="text-align:center;">
+        <div id="qrHolder" style="display:inline-block;background:#fff;padding:14px;border-radius:8px;"></div>
+        <div style="margin-top:10px;font-size:13px;font-weight:700;">${escapeHtml(o.clientName||'')}</div>
+        <div class="hint" style="margin-top:6px;">امسح الكود بكاميرا الموبايل العادية لفتح الأمر مباشرة</div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary ${type==='plastic'?'plastic':''}" onclick="printOrderQR('${type}',${id})">🖨 طباعة الكود</button>
+        <button class="btn btn-ghost" onclick="openDetail('${type}',${id})">رجوع</button>
+      </div>
+    </div>
+  </div>`;
+  document.getElementById('qrHolder').innerHTML = '';
+  new QRCode(document.getElementById('qrHolder'), {
+    text: orderDeepLink(type, id), width:180, height:180,
+    colorDark:'#18161d', colorLight:'#ffffff'
+  });
+}
+
+function printOrderQR(type, id){
+  const o = ORDERS.find(x=>x.type===type && x.id===id);
+  if(!o) return;
+  const area = document.getElementById('printArea') || (() => {
+    const d = document.createElement('div'); d.id='printArea'; document.body.appendChild(d); return d;
+  })();
+  const qrImg = document.querySelector('#qrHolder img, #qrHolder canvas');
+  const qrSrc = qrImg && qrImg.tagName==='IMG' ? qrImg.src : (qrImg ? qrImg.toDataURL() : '');
+  area.innerHTML = `
+    <div style="text-align:center;padding:20px;">
+      <h2>${orderLabel(o)} — ${escapeHtml(o.clientName||'')}</h2>
+      <img src="${qrSrc}" style="width:200px;height:200px;">
+      <p style="font-family:'Tajawal',sans-serif;">النصر المتحدة — امسح الكود لفتح أمر العمل</p>
+    </div>`;
+  window.print();
+}
+
 
 function openEditForm(type, id){
   const o = ORDERS.find(x=>x.type===type && x.id===id);
