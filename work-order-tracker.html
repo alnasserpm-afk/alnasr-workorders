@@ -297,6 +297,8 @@
   .price-field bdi{font-weight:800;font-family:'JetBrains Mono',monospace;}
   .price-card-actions{display:flex;gap:8px;border-top:1px dashed var(--line);padding-top:10px;}
   .price-card.price-editing{border-color:var(--press);grid-column:1/-1;}
+  .price-card.stock-low{border-color:var(--warn);background:#fff7f2;}
+  .stock-warning{margin-top:10px;font-size:12px;font-weight:800;color:var(--warn);}
   .price-editing input{
     width:90px;padding:6px 8px;border:1px solid var(--press);border-radius:4px;font-family:'Tajawal',sans-serif;font-size:12.5px;
   }
@@ -502,6 +504,7 @@
   <button id="tabEmployees" onclick="switchTab('employees')" style="display:none;">الموظفين</button>
   <button id="tabPaperPrices" onclick="switchTab('paperprices')" style="display:none;">أسعار الورق</button>
   <button id="tabAccounting" onclick="switchTab('accounting')" style="display:none;">المحاسبة</button>
+  <button id="tabInventory" onclick="switchTab('inventory')" style="display:none;">المخزن</button>
 </nav>
 
 <button class="fab" id="fabNewOrder" onclick="switchTab('form')" title="أمر عمل جديد">+</button>
@@ -514,6 +517,7 @@
     <button id="bnEmployees" onclick="switchTab('employees')" style="display:none;"><span class="ic">👥</span>الموظفين</button>
     <button id="bnPaperPrices" onclick="switchTab('paperprices')" style="display:none;"><span class="ic">📄</span>أسعار الورق</button>
     <button id="bnAccounting" onclick="switchTab('accounting')" style="display:none;"><span class="ic">💰</span>المحاسبة</button>
+    <button id="bnInventory" onclick="switchTab('inventory')" style="display:none;"><span class="ic">📦</span>المخزن</button>
   </div>
 </div>
 
@@ -524,6 +528,7 @@
   <div id="employeesView" style="display:none;"></div>
   <div id="paperPricesView" style="display:none;"></div>
   <div id="accountingView" style="display:none;"></div>
+  <div id="inventoryView" style="display:none;"></div>
 </main>
 
 <div id="modalRoot"></div>
@@ -742,6 +747,8 @@ async function enterApp(){
   document.getElementById('bnPaperPrices').style.display = CURRENT_USER.role === 'إدارة' ? 'flex' : 'none';
   document.getElementById('tabAccounting').style.display = CURRENT_USER.role === 'إدارة' ? 'inline-block' : 'none';
   document.getElementById('bnAccounting').style.display = CURRENT_USER.role === 'إدارة' ? 'flex' : 'none';
+  document.getElementById('tabInventory').style.display = CURRENT_USER.role === 'إدارة' ? 'inline-block' : 'none';
+  document.getElementById('bnInventory').style.display = CURRENT_USER.role === 'إدارة' ? 'flex' : 'none';
   await loadOrders();
   await loadDaily();
   renderDashboard();
@@ -1283,6 +1290,127 @@ function renderPricingResults(res){
   `;
 }
 
+// ---------- المخزن والمشتريات (صلاحية إدارة فقط) ----------
+let PURCHASES = [];
+
+async function loadPurchases(){
+  try{
+    const {data, error} = await supabaseClient.from('paper_purchases').select('*').order('created_at', {ascending:false}).limit(30);
+    if(error) throw error;
+    PURCHASES = data || [];
+  }catch(e){ PURCHASES = []; showToast('تعذر تحميل سجل المشتريات: ' + e.message); }
+}
+
+async function renderInventory(){
+  const view = document.getElementById('inventoryView');
+  if(!isAdmin()){ view.innerHTML = '<p class="hint">هذه الصفحة متاحة لصلاحية الإدارة فقط.</p>'; return; }
+  view.innerHTML = `<div class="hint">جاري التحميل...</div>`;
+  await Promise.all([loadPaperPrices(), loadPurchases()]);
+
+  const paperOptions = PAPER_PRICES.map(p =>
+    `<option value="${p.id}">${escapeHtml(p.category)} — ${escapeHtml(p.measurement||'')} ${escapeHtml(p.grammage_type||'')} (${escapeHtml(p.source||'')})</option>`
+  ).join('');
+
+  view.innerHTML = `
+    <h3 class="section-title">تسجيل مشترى جديد</h3>
+    <div class="add-emp-box">
+      <div class="calc-fields">
+        <div class="field"><label>نوع الورق</label><select id="purchasePaperId">${paperOptions}</select></div>
+        <div class="field"><label>المورّد</label><input id="purchaseSupplier" type="text" placeholder="اسم المورّد"></div>
+        <div class="field"><label>تاريخ الشراء</label><input id="purchaseDate" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
+        <div class="field"><label>الكمية (بالرزم)</label><input id="purchaseQty" type="number" step="0.01"></div>
+        <div class="field"><label>سعر الرزمة (د.ل)</label><input id="purchaseUnitPrice" type="number" step="0.01"></div>
+        <div class="field"><label>ملاحظات</label><input id="purchaseNotes" type="text"></div>
+      </div>
+      <button class="btn btn-primary" style="margin-top:6px;" onclick="addPurchase()">تسجيل الشراء وتحديث المخزون</button>
+    </div>
+
+    <h3 class="section-title" style="margin-top:24px;">مستوى المخزون الحالي</h3>
+    <div id="inventoryStockWrap"></div>
+
+    <h3 class="section-title" style="margin-top:24px;">آخر المشتريات</h3>
+    <div id="purchasesHistoryWrap"></div>
+  `;
+  renderInventoryStock();
+  renderPurchasesHistory();
+}
+
+function renderInventoryStock(){
+  const wrap = document.getElementById('inventoryStockWrap');
+  if(!wrap) return;
+  if(!PAPER_PRICES.length){ wrap.innerHTML = '<div class="hint">لا توجد أنواع ورق مسجّلة بعد في "أسعار الورق".</div>'; return; }
+  wrap.innerHTML = `<div class="price-cards">` + PAPER_PRICES.map(p => {
+    const stock = Number(p.stock_quantity)||0;
+    const low = stock <= (Number(p.min_threshold)||5);
+    return `<div class="price-card ${low?'stock-low':''}">
+      <div class="price-card-grid">
+        <div class="price-field"><span class="k">النوع</span><bdi>${escapeHtml(p.category)}</bdi></div>
+        <div class="price-field"><span class="k">القياس</span><bdi>${escapeHtml(p.measurement||'—')}</bdi></div>
+        <div class="price-field"><span class="k">المنشأ</span><bdi>${escapeHtml(p.source||'—')}</bdi></div>
+        <div class="price-field"><span class="k">الرصيد الحالي</span><bdi>${stock} رزمة</bdi></div>
+        <div class="price-field"><span class="k">ما يعادل (أفرخ)</span><bdi>${stock * (Number(p.package_size)||0)}</bdi></div>
+        <div class="price-field"><span class="k">حد التنبيه</span><bdi>${Number(p.min_threshold)||5} رزمة</bdi></div>
+      </div>
+      ${low ? '<div class="stock-warning">⚠️ الرصيد منخفض — يحتاج طلب توريد</div>' : ''}
+    </div>`;
+  }).join('') + `</div>`;
+}
+
+function renderPurchasesHistory(){
+  const wrap = document.getElementById('purchasesHistoryWrap');
+  if(!wrap) return;
+  if(!PURCHASES.length){ wrap.innerHTML = '<div class="hint">لا توجد مشتريات مسجّلة بعد.</div>'; return; }
+  wrap.innerHTML = `<div class="price-cards">` + PURCHASES.map(pu => {
+    const paper = PAPER_PRICES.find(p=>p.id===pu.paper_price_id);
+    return `<div class="price-card">
+      <div class="price-card-grid">
+        <div class="price-field"><span class="k">نوع الورق</span><bdi>${paper ? escapeHtml(paper.category+' — '+(paper.measurement||'')) : 'غير معروف'}</bdi></div>
+        <div class="price-field"><span class="k">المورّد</span><bdi>${escapeHtml(pu.supplier||'—')}</bdi></div>
+        <div class="price-field"><span class="k">التاريخ</span><bdi>${escapeHtml(pu.purchase_date||'—')}</bdi></div>
+        <div class="price-field"><span class="k">الكمية</span><bdi>${pu.quantity_packages} رزمة</bdi></div>
+        <div class="price-field"><span class="k">سعر الرزمة</span><bdi>${pu.unit_price||'—'} د.ل</bdi></div>
+        <div class="price-field"><span class="k">الإجمالي</span><bdi>${pu.total_cost||'—'} د.ل</bdi></div>
+      </div>
+      ${pu.notes ? `<div class="hint" style="margin-top:8px;">${escapeHtml(pu.notes)}</div>` : ''}
+    </div>`;
+  }).join('') + `</div>`;
+}
+
+async function addPurchase(){
+  const paperId = Number(document.getElementById('purchasePaperId').value);
+  const supplier = document.getElementById('purchaseSupplier').value.trim();
+  const purchaseDate = document.getElementById('purchaseDate').value;
+  const qty = Number(document.getElementById('purchaseQty').value);
+  const unitPrice = Number(document.getElementById('purchaseUnitPrice').value) || null;
+  const notes = document.getElementById('purchaseNotes').value.trim();
+
+  if(!paperId || !qty){ showToast('نوع الورق والكمية مطلوبان'); return; }
+  const totalCost = unitPrice ? +(unitPrice * qty).toFixed(2) : null;
+
+  try{
+    const {error: insErr} = await supabaseClient.from('paper_purchases').insert({
+      paper_price_id: paperId, supplier, purchase_date: purchaseDate || null,
+      quantity_packages: qty, unit_price: unitPrice, total_cost: totalCost,
+      notes, created_by: getActor()
+    });
+    if(insErr) throw insErr;
+
+    const paper = PAPER_PRICES.find(p=>p.id===paperId);
+    const newStock = (Number(paper.stock_quantity)||0) + qty;
+    const {error: updErr} = await supabaseClient.from('paper_price_list').update({stock_quantity: newStock}).eq('id', paperId);
+    if(updErr) throw updErr;
+    paper.stock_quantity = newStock;
+
+    showToast('تم تسجيل الشراء وتحديث المخزون');
+    await loadPurchases();
+    renderInventoryStock();
+    renderPurchasesHistory();
+    ['purchaseSupplier','purchaseQty','purchaseUnitPrice','purchaseNotes'].forEach(id=>{
+      const el = document.getElementById(id); if(el) el.value = '';
+    });
+  }catch(e){ showToast('خطأ: ' + e.message); }
+}
+
 let formSubTab = 'create';
 
 function switchTab(tab){
@@ -1293,24 +1421,28 @@ function switchTab(tab){
   document.getElementById('tabEmployees').classList.toggle('active', tab==='employees');
   document.getElementById('tabPaperPrices').classList.toggle('active', tab==='paperprices');
   document.getElementById('tabAccounting').classList.toggle('active', tab==='accounting');
+  document.getElementById('tabInventory').classList.toggle('active', tab==='inventory');
   document.getElementById('bnDashboard').classList.toggle('active', tab==='dashboard');
   document.getElementById('bnForm').classList.toggle('active', tab==='form');
   document.getElementById('bnArchive').classList.toggle('active', tab==='archive');
   document.getElementById('bnEmployees').classList.toggle('active', tab==='employees');
   document.getElementById('bnPaperPrices').classList.toggle('active', tab==='paperprices');
   document.getElementById('bnAccounting').classList.toggle('active', tab==='accounting');
+  document.getElementById('bnInventory').classList.toggle('active', tab==='inventory');
   document.getElementById('dashboardView').style.display = tab==='dashboard' ? 'block':'none';
   document.getElementById('formView').style.display = tab==='form' ? 'block':'none';
   document.getElementById('archiveView').style.display = tab==='archive' ? 'block':'none';
   document.getElementById('employeesView').style.display = tab==='employees' ? 'block':'none';
   document.getElementById('paperPricesView').style.display = tab==='paperprices' ? 'block':'none';
   document.getElementById('accountingView').style.display = tab==='accounting' ? 'block':'none';
+  document.getElementById('inventoryView').style.display = tab==='inventory' ? 'block':'none';
   if(tab==='dashboard') renderDashboard();
   if(tab==='form') renderForm();
   if(tab==='archive') renderArchive();
   if(tab==='employees') renderEmployees();
   if(tab==='paperprices') renderPaperPriceList();
   if(tab==='accounting') renderAccounting();
+  if(tab==='inventory') renderInventory();
 }
 function switchFormSubTab(sub){
   formSubTab = sub;
