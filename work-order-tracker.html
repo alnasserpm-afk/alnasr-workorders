@@ -195,6 +195,7 @@
   .history-item{display:flex;gap:10px;font-size:12.5px;padding:8px 0;border-bottom:1px solid #f0ede4;}
   .history-item .ts{font-family:'JetBrains Mono',monospace;color:var(--muted);white-space:nowrap;font-size:11px;}
   .modal-footer{padding:16px 22px;border-top:1px solid var(--line);display:flex;gap:10px;flex-wrap:wrap;justify-content:space-between;}
+  .branch-choice{display:flex;flex-wrap:wrap;gap:8px;width:100%;padding:10px;background:var(--paper);border-radius:8px;border:1px dashed var(--line);}
   .note-row{display:flex;gap:8px;margin-top:10px;}
   .note-row input{flex:1;font-family:'Tajawal',sans-serif;padding:9px 11px;border:1px solid var(--line);border-radius:5px;}
   .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:11px 22px;border-radius:8px;font-size:13px;font-weight:700;z-index:100;opacity:0;transition:opacity .2s, transform .2s;box-shadow:0 10px 30px rgba(0,0,0,.25);}
@@ -535,6 +536,9 @@
 <div id="toast" class="toast"></div>
 
 <script>
+const ROUTE1_LABELS = {design:'تصميم', prep:'تجهيز للطباعة', digital:'طباعة ديجيتال'};
+const ROUTE2_LABELS = {colorsep:'فصل ألوان', click:'تجهيز/طباعة كليكات'};
+
 const STAGES_PAPER = [
   {key:'مستلم', label:'استقبال', dot:'on-gray'},
   {key:'تصميم', label:'تصميم', dot:'on-cyan'},
@@ -545,12 +549,47 @@ const STAGES_PAPER = [
   {key:'المخزن', label:'المخزن', dot:'on-key'},
   {key:'تم التسليم', label:'تم التسليم', dot:'on-key'}
 ];
+// كل التسميات الممكنة عبر كل المسارات (تُستخدم في فلتر الحالة بالداشبورد فقط)
+const PAPER_ALL_STAGE_LABELS = [
+  {key:'مستلم', label:'استقبال'},
+  {key:'تصميم', label:'تصميم'},
+  {key:'تجهيز للطباعة', label:'تجهيز للطباعة'},
+  {key:'طباعة ديجيتال', label:'طباعة ديجيتال'},
+  {key:'فصل ألوان', label:'فصل ألوان'},
+  {key:'تجهيز/طباعة كليكات', label:'تجهيز/طباعة كليكات'},
+  {key:'تجهيز الورق', label:'تجهيز الورق (قص)'},
+  {key:'طباعة', label:'طباعة أوفست'},
+  {key:'تشطيب', label:'تشطيب'},
+  {key:'المخزن', label:'المخزن'},
+  {key:'تم التسليم', label:'تم التسليم'}
+];
 const STAGES_PLASTIC = [
   {key:'مستلم', label:'استلام', dot:'on-gray'},
   {key:'قيد التنفيذ', label:'قيد التنفيذ', dot:'on-plastic'},
   {key:'تم التسليم', label:'تم التسليم', dot:'on-key'}
 ];
 function stagesFor(type){ return type==='plastic' ? STAGES_PLASTIC : STAGES_PAPER; }
+
+// بناء خط السير الفعلي لأمر ورقي معيّن بناءً على اختيارات المسار (route1/route2)
+function stagesForOrder(o){
+  if(o.type==='plastic') return STAGES_PLASTIC;
+  const s = [{key:'مستلم', label:'استقبال', dot:'on-gray'}];
+  if(!o.route1) return s; // لسه ما تحددش المسار
+  s.push({key:ROUTE1_LABELS[o.route1], label:ROUTE1_LABELS[o.route1], dot:'on-cyan'});
+  if(o.route1 !== 'digital'){
+    const label2 = o.route2 ? ROUTE2_LABELS[o.route2] : 'فصل ألوان / كليكات';
+    const key2 = o.route2 ? ROUTE2_LABELS[o.route2] : '__pending_route2__';
+    s.push({key:key2, label:label2, dot:'on-magenta'});
+  }
+  s.push({key:'تجهيز الورق', label:'تجهيز الورق (قص)', dot:'on-yellow'});
+  if(o.route1 !== 'digital'){
+    s.push({key:'طباعة', label:'طباعة أوفست', dot:'on-key'});
+  }
+  s.push({key:'تشطيب', label:'تشطيب', dot:'on-key'});
+  s.push({key:'المخزن', label:'المخزن', dot:'on-key'});
+  s.push({key:'تم التسليم', label:'تم التسليم', dot:'on-key'});
+  return s;
+}
 
 const PRINT_MACHINES = [
   'Heidelberg GTO 52-770530(2)',
@@ -583,6 +622,7 @@ const PAPER_MAP = {
   respPrinting:'resp_printing', respCutting:'resp_cutting', deliveryDate:'delivery_date',
   deliveryNoteNumber:'delivery_note_number', notes:'notes', signature:'signature',
   status:'status', completedQty:'completed_qty', paused:'paused', pauseReason:'pause_reason',
+  route1:'route1', route2:'route2',
   createdAt:'created_at_stamp'
 };
 const PLASTIC_MAP = {
@@ -664,7 +704,7 @@ const PLASTIC_EDIT_FIELDS = [
   ['endDateTime','ساعة وتاريخ الانتهاء'], ['wasteQty','كمية الفاقد'], ['technician','اسم الفني'],
   ['assistant1','مساعد الفني 1'], ['assistant2','مساعد الفني 2'], ['generalNote','ملاحظة عامة']
 ];
-const ARRAY_FIELDS = ['colors','finishing'];
+const ARRAY_FIELDS = ['colors','finishing','workType'];
 
 function orderLabel(o){
   return (o.type==='plastic' ? 'ب' : 'و') + '#' + o.id;
@@ -1460,7 +1500,7 @@ function isOverdue(order){
 
 function allStatusOptions(){
   const seen = new Map();
-  [...STAGES_PAPER, ...STAGES_PLASTIC].forEach(s => { if(!seen.has(s.key)) seen.set(s.key, s.label); });
+  [...PAPER_ALL_STAGE_LABELS, ...STAGES_PLASTIC].forEach(s => { if(!seen.has(s.key)) seen.set(s.key, s.label); });
   return [...seen.entries()];
 }
 function matchesSearch(o, term){
@@ -1583,7 +1623,7 @@ function checkOverdueNotifications(force){
 
 function buildOrderCard(o){
   const overdue = isOverdue(o);
-  const stages = stagesFor(o.type);
+  const stages = stagesForOrder(o);
   const stageIdx = stages.findIndex(s=>s.key===o.status);
   const dots = stages.map((s,i)=>`<span class="${i<=stageIdx ? s.dot : ''}"></span>`).join('');
   const lastEvent = (o.history && o.history.length) ? o.history[o.history.length-1] : null;
@@ -1725,7 +1765,7 @@ function paperFormHtml(){
     <div class="section">
       <h3>بيانات العمل</h3>
       <div class="body">
-        ${fieldOptionsRow('workType', ['تصميم','طباعة أوفست','طباعة ديجيتال','طباعة تيبو'], 'نوع العمل')}
+        ${checkboxRow('workType', ['تصميم','طباعة أوفست','طباعة ديجيتال','طباعة تيبو'], 'نوع العمل')}
         <div class="field"><label>اسم العمل</label><input type="text" name="workName"></div>
         <div class="field"><label>الكمية المطلوبة</label><input type="text" name="quantity"></div>
         <div class="field"><label>المقاس النهائي المطلوب</label><input type="text" name="finalSize"></div>
@@ -1964,7 +2004,7 @@ function attachPaperFormHandler(){
     const order = {
       id: nextId, type:'paper',
       clientName: get('clientName'), clientType: get('clientType'),
-      workType: get('workType'), workName: get('workName'), quantity: get('quantity'),
+      workType: getAll('workType'), workName: get('workName'), quantity: get('quantity'),
       finalSize: get('finalSize'), otherInfo: get('otherInfo'),
       printQty: get('printQty'), colors: getAll('colors'), extraColors: get('extraColors'),
       sides: get('sides'), clip: get('clip'), plateCount: get('plateCount'),
@@ -2038,7 +2078,7 @@ function attachPlasticFormHandler(){
 function openDetail(type, id){
   const o = ORDERS.find(x=>x.type===type && x.id===id);
   if(!o) return;
-  const stages = stagesFor(o.type);
+  const stages = stagesForOrder(o);
   const stageIdx = stages.findIndex(s=>s.key===o.status);
   const pipeline = stages.map((s,i)=>{
     const cls = i<stageIdx ? 'done' : (i===stageIdx ? ('current '+(o.type==='plastic'?'plastic':'')) : '');
@@ -2046,6 +2086,8 @@ function openDetail(type, id){
   }).join('<span class="arrow">←</span>');
   const overdue = isOverdue(o);
   const nextStage = stageIdx < stages.length-1 ? stages[stageIdx+1] : null;
+  const isRoute1Choice = o.type==='paper' && o.status==='مستلم';
+  const isRoute2Choice = o.type==='paper' && o.route1 && o.route1!=='digital' && !o.route2 && o.status===ROUTE1_LABELS[o.route1];
 
   let bodyExtra = '';
   if(o.type === 'paper'){
@@ -2150,8 +2192,21 @@ function openDetail(type, id){
       </div>
       <div class="modal-footer">
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          ${nextStage && !o.paused ? `<button class="btn btn-primary ${o.type==='plastic'?'plastic':''}" onclick="advanceStage('${o.type}',${o.id})">الانتقال إلى: ${nextStage.label}</button>` : ''}
-          ${!nextStage ? '<span class="hint">تم إكمال جميع المراحل</span>' : ''}
+          ${isRoute1Choice && !o.paused ? `
+            <div class="branch-choice">
+              <span class="hint" style="width:100%;">اختر المسار التالي:</span>
+              <button class="btn btn-primary ${o.type==='plastic'?'plastic':''}" onclick="chooseRoute1('${o.type}',${o.id},'design')">تصميم</button>
+              <button class="btn btn-primary ${o.type==='plastic'?'plastic':''}" onclick="chooseRoute1('${o.type}',${o.id},'prep')">تجهيز للطباعة</button>
+              <button class="btn btn-primary ${o.type==='plastic'?'plastic':''}" onclick="chooseRoute1('${o.type}',${o.id},'digital')">طباعة ديجيتال</button>
+            </div>` : ''}
+          ${isRoute2Choice && !o.paused ? `
+            <div class="branch-choice">
+              <span class="hint" style="width:100%;">اختر المسار التالي:</span>
+              <button class="btn btn-primary" onclick="chooseRoute2('${o.type}',${o.id},'colorsep')">فصل ألوان</button>
+              <button class="btn btn-primary" onclick="chooseRoute2('${o.type}',${o.id},'click')">تجهيز/طباعة كليكات</button>
+            </div>` : ''}
+          ${nextStage && !o.paused && !isRoute1Choice && !isRoute2Choice ? `<button class="btn btn-primary ${o.type==='plastic'?'plastic':''}" onclick="advanceStage('${o.type}',${o.id})">الانتقال إلى: ${nextStage.label}</button>` : ''}
+          ${!nextStage && !isRoute1Choice ? '<span class="hint">تم إكمال جميع المراحل</span>' : ''}
           ${nextStage && o.paused ? '<span class="hint">الأمر متوقف — استأنف العمل أولًا للانتقال للمرحلة التالية</span>' : ''}
           <button class="btn btn-ghost" onclick="copyAlert('${o.type}',${o.id})">نسخ رسالة تنبيه</button>
         </div>
@@ -2296,7 +2351,7 @@ async function updateProgress(type, id){
   const o = ORDERS.find(x=>x.type===type && x.id===id);
   if(!o) return;
   o.completedQty = val;
-  const stages = stagesFor(type);
+  const stages = stagesForOrder(o);
   const stageIdx = stages.findIndex(s=>s.key===o.status);
   o.history.push({ts: nowStamp(), event:`تحديث الكمية المنجزة في مرحلة "${stages[stageIdx]?stages[stageIdx].label:o.status}": ${val}`, actor: getActor()});
   await saveOrders();
@@ -2310,7 +2365,7 @@ async function pauseOrder(type, id){
   if(!reason){ showToast('اكتب سبب الإيقاف'); return; }
   const o = ORDERS.find(x=>x.type===type && x.id===id);
   if(!o) return;
-  const stages = stagesFor(type);
+  const stages = stagesForOrder(o);
   const stageIdx = stages.findIndex(s=>s.key===o.status);
   o.paused = true;
   o.pauseReason = reason;
@@ -2323,7 +2378,7 @@ async function pauseOrder(type, id){
 async function resumeOrder(type, id){
   const o = ORDERS.find(x=>x.type===type && x.id===id);
   if(!o) return;
-  const stages = stagesFor(type);
+  const stages = stagesForOrder(o);
   const stageIdx = stages.findIndex(s=>s.key===o.status);
   o.paused = false;
   o.history.push({ts: nowStamp(), event:`تم استئناف العمل في مرحلة "${stages[stageIdx]?stages[stageIdx].label:o.status}"`, actor: getActor()});
@@ -2334,11 +2389,36 @@ async function resumeOrder(type, id){
   renderDashboard();
 }
 
+async function chooseRoute1(type, id, choice){
+  const o = ORDERS.find(x=>x.type===type && x.id===id);
+  if(!o) return;
+  o.route1 = choice;
+  o.status = ROUTE1_LABELS[choice];
+  o.completedQty = '';
+  o.history.push({ts: nowStamp(), event:`تم اختيار المسار: ${ROUTE1_LABELS[choice]}`, actor: getActor()});
+  await saveOrders();
+  showToast(`تم التحديث: ${ROUTE1_LABELS[choice]}`);
+  openDetail(type, id);
+  renderDashboard();
+}
+async function chooseRoute2(type, id, choice){
+  const o = ORDERS.find(x=>x.type===type && x.id===id);
+  if(!o) return;
+  o.route2 = choice;
+  o.status = ROUTE2_LABELS[choice];
+  o.completedQty = '';
+  o.history.push({ts: nowStamp(), event:`تم اختيار المسار: ${ROUTE2_LABELS[choice]}`, actor: getActor()});
+  await saveOrders();
+  showToast(`تم التحديث: ${ROUTE2_LABELS[choice]}`);
+  openDetail(type, id);
+  renderDashboard();
+}
+
 async function advanceStage(type, id){
   const o = ORDERS.find(x=>x.type===type && x.id===id);
   if(!o) return;
   if(o.paused){ showToast('استأنف العمل أولًا قبل الانتقال للمرحلة التالية'); return; }
-  const stages = stagesFor(type);
+  const stages = stagesForOrder(o);
   const idx = stages.findIndex(s=>s.key===o.status);
   if(idx >= stages.length-1) return;
   const next = stages[idx+1];
